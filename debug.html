@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Déboggage Hooked</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      line-height: 1.6;
+    }
+    button {
+      margin: 5px;
+      padding: 8px 15px;
+      cursor: pointer;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Débogage de l'application Hooked</h1>
+  
+  <div>
+    <h2>Actions</h2>
+    <button onclick="resetStorage()">Réinitialiser le stockage</button>
+    <button onclick="checkStorage()">Vérifier le stockage</button>
+    <button onclick="initializeSpots()">Initialiser les spots</button>
+    <button onclick="displaySpots()">Afficher les spots</button>
+  </div>
+  
+  <div>
+    <h2>Résultats</h2>
+    <pre id="results">Les résultats s'afficheront ici...</pre>
+  </div>
+  
+  <script>
+    // Constantes
+    const STORAGE_KEYS = {
+      SPOTS: 'fishing_spots',
+      CATCHES: 'catches',
+      INTERACTIONS: 'interactions',
+      USERS: 'users',
+      CUSTOM_FISH_TYPES: 'custom_fish_types',
+      FAVORITES: 'favorites',
+      CURRENT_USER: 'current_user'
+    };
+
+    // Fonctions d'utilitaire
+    function log(message, type = 'info') {
+      const resultsElement = document.getElementById('results');
+      const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+      
+      const timestamp = new Date().toLocaleTimeString();
+      resultsElement.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+      console.log(`[${timestamp}] ${message}`);
+    }
+    
+    function displayObject(obj) {
+      return JSON.stringify(obj, null, 2);
+    }
+    
+    // Actions de débogage
+    function resetStorage() {
+      try {
+        log('Réinitialisation du stockage...');
+        
+        // Supprimer toutes les clés
+        Object.values(STORAGE_KEYS).forEach(key => {
+          localStorage.removeItem(key);
+          log(`Clé supprimée: ${key}`);
+        });
+        
+        // Réinitialiser avec des tableaux vides
+        localStorage.setItem(STORAGE_KEYS.SPOTS, '[]');
+        localStorage.setItem(STORAGE_KEYS.CATCHES, '[]');
+        localStorage.setItem(STORAGE_KEYS.INTERACTIONS, '[]');
+        localStorage.setItem(STORAGE_KEYS.FAVORITES, '[]');
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_FISH_TYPES, '[]');
+        localStorage.setItem(STORAGE_KEYS.USERS, '[]');
+        
+        log('Réinitialisation terminée', 'success');
+      } catch (error) {
+        log(`Erreur lors de la réinitialisation: ${error.message}`, 'error');
+      }
+    }
+    
+    function checkStorage() {
+      try {
+        log('Vérification du stockage...');
+        
+        const storageState = {};
+        
+        // Vérifier chaque clé
+        Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+          const value = localStorage.getItem(key);
+          let data = null;
+          
+          try {
+            data = value ? JSON.parse(value) : null;
+          } catch (e) {
+            data = { error: "Impossible de parser les données" };
+          }
+          
+          storageState[name] = {
+            exists: value !== null,
+            length: data && Array.isArray(data) ? data.length : 0,
+            isEmpty: !data || (Array.isArray(data) && data.length === 0)
+          };
+        });
+        
+        log(`État du localStorage: ${displayObject(storageState)}`, 'success');
+      } catch (error) {
+        log(`Erreur lors de la vérification: ${error.message}`, 'error');
+      }
+    }
+    
+    function initializeSpots() {
+      try {
+        log('Tentative d\'initialisation des spots...');
+        
+        // Charger le script principal de l'application
+        const script = document.createElement('script');
+        script.src = './src/main.jsx';
+        script.type = 'module';
+        
+        script.onload = () => {
+          log('Script chargé avec succès', 'success');
+        };
+        
+        script.onerror = (error) => {
+          log(`Erreur lors du chargement du script: ${error.message}`, 'error');
+          log('Impossible de charger le script principal. Veuillez ouvrir l\'application normale.', 'error');
+        };
+        
+        document.body.appendChild(script);
+      } catch (error) {
+        log(`Erreur lors de l'initialisation: ${error.message}`, 'error');
+      }
+    }
+    
+    function displaySpots() {
+      try {
+        log('Affichage des spots...');
+        
+        const spotsJson = localStorage.getItem(STORAGE_KEYS.SPOTS);
+        
+        if (!spotsJson) {
+          log('Aucun spot trouvé dans le localStorage', 'error');
+          return;
+        }
+        
+        const spots = JSON.parse(spotsJson);
+        
+        if (spots.length === 0) {
+          log('La liste des spots est vide', 'error');
+          return;
+        }
+        
+        log(`Nombre de spots: ${spots.length}`, 'success');
+        log(`Premier spot: ${displayObject(spots[0])}`, 'success');
+      } catch (error) {
+        log(`Erreur lors de l'affichage des spots: ${error.message}`, 'error');
+      }
+    }
+    
+    // Vérification initiale
+    checkStorage();
+  </script>
+</body>
+</html> 

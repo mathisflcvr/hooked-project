@@ -25,12 +25,28 @@ const DEFAULT_USER = {
 export const storageService = {
   // Méthodes génériques
   getItem(key) {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : [];
+    try {
+      const item = localStorage.getItem(key);
+      // Si l'item existe, on le parse
+      if (item !== null) {
+        return JSON.parse(item);
+      }
+      // Sinon on retourne un tableau vide et on initialise la clé
+      console.log(`Initialisation de la clé ${key} dans le localStorage`);
+      this.setItem(key, []);
+      return [];
+    } catch (error) {
+      console.error(`Erreur lors de la récupération de ${key}:`, error);
+      return [];
+    }
   },
 
   setItem(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error(`Erreur lors de l'enregistrement de ${key}:`, error);
+    }
   },
 
   // Méthodes spécifiques pour les spots
@@ -294,5 +310,56 @@ export const storageService = {
     // Mettre à jour l'utilisateur courant
     this.setCurrentUser(updatedUser);
     return updatedUser;
+  },
+  
+  // Méthode pour réinitialiser complètement le stockage (utile pour le débogage)
+  resetStorage() {
+    console.log('Réinitialisation complète du localStorage');
+    
+    // Supprimer toutes les clés pertinentes
+    Object.values(STORAGE_KEYS).forEach(key => {
+      localStorage.removeItem(key);
+      console.log(`Clé supprimée: ${key}`);
+    });
+    
+    // Réinitialiser chaque stockage avec un tableau vide
+    this.setItem(STORAGE_KEYS.SPOTS, []);
+    this.setItem(STORAGE_KEYS.CATCHES, []);
+    this.setItem(STORAGE_KEYS.INTERACTIONS, []);
+    this.setItem(STORAGE_KEYS.FAVORITES, []);
+    this.setItem(STORAGE_KEYS.CUSTOM_FISH_TYPES, []);
+    
+    // Réinitialiser l'utilisateur par défaut
+    this.setItem(STORAGE_KEYS.USERS, [DEFAULT_USER]);
+    this.setCurrentUser(DEFAULT_USER);
+    
+    console.log('Réinitialisation terminée');
+    return true;
+  },
+  
+  // Méthode pour vérifier l'état du localStorage
+  checkStorage() {
+    const storageState = {};
+    
+    // Vérifier chaque clé
+    Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+      const value = localStorage.getItem(key);
+      let data = null;
+      
+      try {
+        data = value ? JSON.parse(value) : null;
+      } catch (e) {
+        data = { error: "Impossible de parser les données" };
+      }
+      
+      storageState[name] = {
+        exists: value !== null,
+        length: data && Array.isArray(data) ? data.length : 0,
+        isEmpty: !data || (Array.isArray(data) && data.length === 0)
+      };
+    });
+    
+    console.log('État du localStorage:', storageState);
+    return storageState;
   }
 }; 
