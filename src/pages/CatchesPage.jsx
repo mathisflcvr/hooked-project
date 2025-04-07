@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, List, Button, Modal, Form, Input, Select, Upload, message, Empty, Tabs, Radio, Space } from 'antd';
-import { UploadOutlined, CameraOutlined, PlusOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined } from '@ant-design/icons';
+import { Card, List, Button, Modal, Form, Input, Select, Upload, message, Empty, Tabs, Radio, Space, Popconfirm } from 'antd';
+import { UploadOutlined, CameraOutlined, PlusOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { imageService } from '../services/imageService';
 import { geocodingService } from '../services/geocodingService';
@@ -23,7 +23,9 @@ const LocationPicker = ({ value, onChange }) => {
   const [position, setPosition] = useState(value || [48.8566, 2.3522]); // Paris par défaut
 
   useEffect(() => {
-    if (navigator.geolocation) {
+    if (value) {
+      setPosition(value);
+    } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const newPos = [position.coords.latitude, position.coords.longitude];
@@ -35,7 +37,7 @@ const LocationPicker = ({ value, onChange }) => {
         }
       );
     }
-  }, []);
+  }, [value]);
 
   const MapClickHandler = () => {
     useMapEvents({
@@ -72,6 +74,8 @@ const LocationPicker = ({ value, onChange }) => {
 const CatchesPage = () => {
   const [catches, setCatches] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [currentCatch, setCurrentCatch] = useState(null);
   const [form] = Form.useForm();
   const [addressForm] = Form.useForm();
   const [waterType, setWaterType] = useState(WATER_TYPES.FRESH);
@@ -84,9 +88,13 @@ const CatchesPage = () => {
   const [addressError, setAddressError] = useState('');
 
   useEffect(() => {
+    loadCatches();
+  }, []);
+  
+  const loadCatches = () => {
     const loadedCatches = storageService.getCatches();
     setCatches(loadedCatches);
-  }, []);
+  };
 
   const handleWaterTypeChange = (e) => {
     setWaterType(e.target.value);
@@ -137,6 +145,52 @@ const CatchesPage = () => {
       setAddressError('Erreur lors de la recherche');
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  const handleEditCatch = (catchItem) => {
+    setCurrentCatch(catchItem);
+    setIsEditMode(true);
+    setImageUrl(catchItem.photo || '');
+    setWaterType(catchItem.waterType || WATER_TYPES.FRESH);
+    setCustomLocation(catchItem.location);
+    
+    if (catchItem.fishType === 'custom') {
+      setShowCustomFishInput(true);
+    }
+    
+    // Remplir le formulaire avec les données existantes
+    form.setFieldsValue({
+      spotId: catchItem.spotId,
+      fishType: catchItem.fishType,
+      customFishType: catchItem.customFishType,
+      bait: catchItem.bait,
+      technique: catchItem.technique,
+      weather: catchItem.weather,
+      weight: catchItem.weight,
+      length: catchItem.length,
+      notes: catchItem.notes
+    });
+    
+    // Remplir l'adresse si disponible
+    if (catchItem.address) {
+      addressForm.setFieldsValue({
+        address: catchItem.address
+      });
+    }
+    
+    setIsModalVisible(true);
+  };
+  
+  const handleDeleteCatch = (catchId) => {
+    try {
+      storageService.deleteCatch(catchId);
+      message.success('Capture supprimée avec succès');
+      // Recharger les captures
+      loadCatches();
+    } catch (error) {
+      console.error('Erreur lors de la suppression de la capture:', error);
+      message.error('Impossible de supprimer la capture');
     }
   };
 
@@ -195,29 +249,51 @@ const CatchesPage = () => {
       
       const currentUser = userService.getCurrentUser();
       
-      // Créer la nouvelle capture
-      const newCatch = createCatch({
-        ...formValues,
-        ...fishTypeData,
-        location: customLocation,
-        address: addressForm.getFieldValue('address'),
-        createdBy: currentUser.id,
-        photo: imageUrl
-      });
+      if (isEditMode && currentCatch) {
+        // Mode édition
+        const updatedCatch = {
+          ...currentCatch,
+          ...formValues,
+          ...fishTypeData,
+          location: customLocation,
+          address: addressForm.getFieldValue('address'),
+          photo: imageUrl || currentCatch.photo,
+          waterType: waterType
+        };
+        
+        storageService.updateCatch(updatedCatch);
+        // Mettre à jour l'état local
+        setCatches(catches.map(c => c.id === updatedCatch.id ? updatedCatch : c));
+        message.success('Capture mise à jour avec succès !');
+      } else {
+        // Mode ajout
+        // Créer la nouvelle capture
+        const newCatch = createCatch({
+          ...formValues,
+          ...fishTypeData,
+          location: customLocation,
+          address: addressForm.getFieldValue('address'),
+          createdBy: currentUser.id,
+          photo: imageUrl,
+          waterType: waterType
+        });
 
-      // Enregistrer dans le stockage
-      storageService.addCatch(newCatch);
-      setCatches([...catches, newCatch]);
+        // Enregistrer dans le stockage
+        storageService.addCatch(newCatch);
+        setCatches([...catches, newCatch]);
+        message.success('Capture ajoutée avec succès !');
+      }
       
       // Réinitialiser le formulaire et fermer la modal
       setIsModalVisible(false);
+      setIsEditMode(false);
+      setCurrentCatch(null);
       form.resetFields();
       addressForm.resetFields();
       setWaterType(WATER_TYPES.FRESH);
       setShowCustomFishInput(false);
       setCustomLocation(null);
       setImageUrl('');
-      message.success('Capture ajoutée avec succès !');
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la capture:', error);
       message.error('Une erreur est survenue lors de l\'ajout de la capture');
@@ -279,7 +355,17 @@ const CatchesPage = () => {
       <Card
         title="Mes Captures"
         extra={
-          <Button type="primary" icon={<CameraOutlined />} onClick={() => setIsModalVisible(true)}>
+          <Button type="primary" icon={<CameraOutlined />} onClick={() => {
+            setIsEditMode(false);
+            setCurrentCatch(null);
+            setImageUrl('');
+            setCustomLocation(null);
+            form.resetFields();
+            addressForm.resetFields();
+            setWaterType(WATER_TYPES.FRESH);
+            setShowCustomFishInput(false);
+            setIsModalVisible(true);
+          }}>
             Ajouter une capture
           </Button>
         }
@@ -313,6 +399,22 @@ const CatchesPage = () => {
                     />
                   )
                 }
+                actions={[
+                  <Button icon={<EditOutlined />} onClick={() => handleEditCatch(item)}>
+                    Modifier
+                  </Button>,
+                  <Popconfirm
+                    title="Supprimer cette capture"
+                    description="Êtes-vous sûr de vouloir supprimer cette capture ?"
+                    onConfirm={() => handleDeleteCatch(item.id)}
+                    okText="Oui"
+                    cancelText="Non"
+                  >
+                    <Button icon={<DeleteOutlined />} danger>
+                      Supprimer
+                    </Button>
+                  </Popconfirm>
+                ]}
               >
                 <List.Item.Meta
                   title={`${getFishName(item.fishType, item.customFishType)} - ${new Date(item.createdAt).toLocaleDateString()}`}
@@ -353,11 +455,13 @@ const CatchesPage = () => {
       </Card>
 
       <Modal
-        title="Ajouter une capture"
+        title={isEditMode ? "Modifier la capture" : "Ajouter une capture"}
         open={isModalVisible}
         onOk={handleAddCatch}
         onCancel={() => {
           setIsModalVisible(false);
+          setIsEditMode(false);
+          setCurrentCatch(null);
           setWaterType(WATER_TYPES.FRESH);
           setShowCustomFishInput(false);
           setCustomLocation(null);
@@ -490,7 +594,7 @@ const CatchesPage = () => {
               <small>Ou sélectionnez l'emplacement précis sur la carte</small>
             </div>
             
-            <LocationPicker onChange={setCustomLocation} />
+            <LocationPicker onChange={setCustomLocation} value={customLocation ? [customLocation.lat, customLocation.lng] : null} />
           </Tabs.TabPane>
           
           <Tabs.TabPane tab="Photo" key="3">

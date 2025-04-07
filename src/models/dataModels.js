@@ -138,28 +138,32 @@ export const WATER_TYPES_FR = {
 };
 
 // Modèle pour un spot de pêche
-export const createFishingSpot = (data) => ({
-  id: data.id,
+export const createSpot = (data) => ({
+  id: data.id || Date.now().toString(),
   name: data.name,
   description: data.description,
-  location: {
-    lat: data.location.lat,
-    lng: data.location.lng
-  },
+  type: data.type || 'Autre',
+  location: data.location || {
+    lat: 48.8566, 
+    lng: 2.3522
+  }, // Paris par défaut
+  address: data.address || null,
+  image: data.image || null,
   waterType: data.waterType || WATER_TYPES.FRESH,
-  fishingType: data.fishingType,
-  fishTypes: data.fishTypes,
-  createdAt: data.createdAt,
+  fishTypes: data.fishTypes || [],
+  createdAt: data.createdAt || new Date().toISOString(),
   createdBy: data.createdBy
 });
 
 // Modèle pour une capture
 export const createCatch = (data) => ({
-  id: data.id,
+  id: data.id || Date.now().toString(),
   spotId: data.spotId,
   location: data.location || null, // Emplacement spécifique de la capture
+  address: data.address || null, // Adresse textuelle
   fishType: data.fishType,
   customFishType: data.customFishType || null, // Type de poisson personnalisé
+  waterType: data.waterType || WATER_TYPES.FRESH, // Type d'eau
   photo: data.photo,
   bait: data.bait,
   technique: data.technique,
@@ -167,7 +171,7 @@ export const createCatch = (data) => ({
   weight: data.weight,
   length: data.length,
   notes: data.notes,
-  createdAt: data.createdAt,
+  createdAt: data.createdAt || new Date().toISOString(),
   createdBy: data.createdBy
 });
 

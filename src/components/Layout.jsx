@@ -6,7 +6,8 @@ import {
   CameraOutlined,
   TeamOutlined,
   UserOutlined,
-  BulbOutlined
+  BulbOutlined,
+  EnvironmentOutlined
 } from '@ant-design/icons';
 
 const { Header, Content, Sider } = AntLayout;
@@ -32,12 +33,17 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
     {
       key: '/',
       icon: <HomeOutlined />,
-      label: <Link to="/">Carte des Spots</Link>,
+      label: <Link to="/">Carte</Link>,
+    },
+    {
+      key: '/spots',
+      icon: <EnvironmentOutlined />,
+      label: <Link to="/spots">Spots</Link>,
     },
     {
       key: '/catches',
       icon: <CameraOutlined />,
-      label: <Link to="/catches">Mes Captures</Link>,
+      label: <Link to="/catches">Captures</Link>,
     },
     {
       key: '/community',
@@ -101,6 +107,7 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
           <div>
             <Title level={4} style={{ margin: 0 }}>
               {location.pathname === '/' && 'Carte des Spots'}
+              {location.pathname === '/spots' && 'Mes Spots'}
               {location.pathname === '/catches' && 'Mes Captures'}
               {location.pathname === '/community' && 'Communauté'}
               {location.pathname === '/profile' && 'Profil'}

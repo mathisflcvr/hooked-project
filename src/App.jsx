@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Layout from './components/Layout';
 import MapPage from './pages/MapPage';
 import CatchesPage from './pages/CatchesPage';
+import SpotsPage from './pages/SpotsPage';
 import CommunityPage from './pages/CommunityPage';
 import ProfilePage from './pages/ProfilePage';
 
@@ -32,6 +33,7 @@ function App() {
         <Layout theme={theme} toggleTheme={toggleTheme}>
           <Routes>
             <Route path="/" element={<MapPage />} />
+            <Route path="/spots" element={<SpotsPage />} />
             <Route path="/catches" element={<CatchesPage />} />
             <Route path="/community" element={<CommunityPage />} />
             <Route path="/profile" element={<ProfilePage />} />
