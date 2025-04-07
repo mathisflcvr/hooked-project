@@ -617,7 +617,7 @@ const CatchesPage = () => {
                 )}
               </Upload>
               <div style={{ marginTop: 8 }}>
-                <small>Format JPG/PNG, taille maximale 2MB</small>
+                <small>Format JPG/PNG, taille maximale 50MB</small>
               </div>
             </div>
           </Tabs.TabPane>

@@ -15,14 +15,14 @@ export const imageService = {
     // Vérifier le type de fichier
     const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
     
-    // Vérifier la taille (max 2MB)
-    const isLt2M = file.size / 1024 / 1024 < 2;
+    // Vérifier la taille (max 50MB)
+    const isLt50M = file.size / 1024 / 1024 < 50;
     
     return {
-      isValid: isJpgOrPng && isLt2M,
+      isValid: isJpgOrPng && isLt50M,
       errors: [
         !isJpgOrPng ? 'Seuls les fichiers JPG/PNG sont autorisés' : null,
-        !isLt2M ? 'L\'image doit être inférieure à 2MB' : null
+        !isLt50M ? 'L\'image doit être inférieure à 50MB' : null
       ].filter(Boolean)
     };
   },

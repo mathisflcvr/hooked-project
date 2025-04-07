@@ -1,14 +1,70 @@
 import { useState, useEffect } from 'react';
-import { Card, List, Button, Modal, Form, Input, Select, message, Empty, Tag, Upload, Popconfirm } from 'antd';
-import { PlusOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, EditOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Card, List, Button, Modal, Form, Input, Select, message, Empty, Tag, Upload, Popconfirm, Space, Tabs } from 'antd';
+import { PlusOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, EditOutlined, DeleteOutlined, LoadingOutlined, SearchOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { userService } from '../services/userService';
 import { imageService } from '../services/imageService';
+import { geocodingService } from '../services/geocodingService';
 import { createSpot } from '../models/dataModels';
 import { FISH_TYPES, FISH_TYPES_FR } from '../models/dataModels';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const { TextArea } = Input;
 const { Option } = Select;
+
+// Composant pour sélectionner un emplacement sur la carte
+const LocationPicker = ({ value, onChange }) => {
+  const [position, setPosition] = useState(value || [48.8566, 2.3522]); // Paris par défaut
+
+  useEffect(() => {
+    if (value) {
+      setPosition(value);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newPos = [position.coords.latitude, position.coords.longitude];
+          setPosition(newPos);
+          onChange && onChange({ lat: newPos[0], lng: newPos[1] });
+        },
+        (error) => {
+          console.error('Erreur de géolocalisation:', error);
+        }
+      );
+    }
+  }, [value]);
+
+  const MapClickHandler = () => {
+    useMapEvents({
+      click: (e) => {
+        const { lat, lng } = e.latlng;
+        setPosition([lat, lng]);
+        onChange && onChange({ lat, lng });
+      },
+    });
+    return null;
+  };
+
+  return (
+    <div style={{ height: 300, width: '100%', marginBottom: 16 }}>
+      <MapContainer
+        center={position}
+        zoom={13}
+        style={{ height: '100%', width: '100%', borderRadius: '8px' }}
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+        <Marker position={position} />
+        <MapClickHandler />
+      </MapContainer>
+      <div style={{ marginTop: 8 }}>
+        <small>Cliquez sur la carte pour définir la localisation précise de votre spot.</small>
+      </div>
+    </div>
+  );
+};
 
 const SpotsPage = () => {
   const [spots, setSpots] = useState([]);
@@ -16,9 +72,14 @@ const SpotsPage = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentSpot, setCurrentSpot] = useState(null);
   const [form] = Form.useForm();
+  const [addressForm] = Form.useForm();
   const [favorites, setFavorites] = useState({});
   const [imageUrl, setImageUrl] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
+  const [customLocation, setCustomLocation] = useState(null);
+  const [addressError, setAddressError] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [activeTabKey, setActiveTabKey] = useState('1');
 
   useEffect(() => {
     loadSpots();
@@ -71,6 +132,7 @@ const SpotsPage = () => {
     setCurrentSpot(spot);
     setIsEditMode(true);
     setImageUrl(spot.image || '');
+    setCustomLocation(spot.location);
     
     // Remplir le formulaire avec les données du spot
     form.setFieldsValue({
@@ -79,6 +141,13 @@ const SpotsPage = () => {
       type: spot.type,
       fishTypes: spot.fishTypes
     });
+    
+    // Remplir l'adresse si disponible
+    if (spot.address) {
+      addressForm.setFieldsValue({
+        address: spot.address
+      });
+    }
     
     setIsModalVisible(true);
   };
@@ -94,6 +163,47 @@ const SpotsPage = () => {
       message.error('Impossible de supprimer le spot');
     }
   };
+  
+  const handleAddressSearch = async () => {
+    try {
+      setIsSearching(true);
+      setAddressError('');
+      
+      const address = addressForm.getFieldValue('address');
+      if (!address || address.trim() === '') {
+        setAddressError('Veuillez entrer une adresse');
+        setIsSearching(false);
+        return;
+      }
+      
+      const result = await geocodingService.geocodeAddress(address);
+      
+      if (result) {
+        setCustomLocation({ lat: result.lat, lng: result.lng });
+        message.success('Adresse trouvée !');
+      } else {
+        setAddressError('Adresse non trouvée');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la recherche d\'adresse:', error);
+      setAddressError('Erreur lors de la recherche');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+  
+  const updateAddressFromCoordinates = async (lat, lng) => {
+    try {
+      const result = await geocodingService.reverseGeocode(lat, lng);
+      if (result) {
+        addressForm.setFieldsValue({ 
+          address: result.displayName
+        });
+      }
+    } catch (error) {
+      console.error("Erreur lors de la récupération de l'adresse:", error);
+    }
+  };
 
   const handleAddSpot = () => {
     form.validateFields().then((values) => {
@@ -107,7 +217,9 @@ const SpotsPage = () => {
           description: values.description,
           type: values.type,
           fishTypes: values.fishTypes,
-          image: imageUrl || currentSpot.image
+          image: imageUrl || currentSpot.image,
+          location: customLocation || currentSpot.location,
+          address: addressForm.getFieldValue('address') || currentSpot.address
         };
         
         storageService.updateSpot(updatedSpot);
@@ -123,7 +235,9 @@ const SpotsPage = () => {
           type: values.type,
           fishTypes: values.fishTypes,
           createdBy: currentUser.id,
-          image: imageUrl
+          image: imageUrl,
+          location: customLocation,
+          address: addressForm.getFieldValue('address')
         });
 
         storageService.addSpot(newSpot);
@@ -136,7 +250,9 @@ const SpotsPage = () => {
       setIsEditMode(false);
       setCurrentSpot(null);
       setImageUrl('');
+      setCustomLocation(null);
       form.resetFields();
+      addressForm.resetFields();
     });
   };
 
@@ -170,6 +286,15 @@ const SpotsPage = () => {
       setImageLoading(false);
     }
   };
+  
+  const handleLocationChange = (location) => {
+    setCustomLocation(location);
+    
+    // Mise à jour automatique de l'adresse à partir des coordonnées
+    if (location) {
+      updateAddressFromCoordinates(location.lat, location.lng);
+    }
+  };
 
   const uploadButton = (
     <div>
@@ -194,7 +319,9 @@ const SpotsPage = () => {
             setIsEditMode(false);
             setCurrentSpot(null);
             setImageUrl('');
+            setCustomLocation(null);
             form.resetFields();
+            addressForm.resetFields();
             setIsModalVisible(true);
           }}>
             Ajouter un spot
@@ -274,79 +401,126 @@ const SpotsPage = () => {
           setIsModalVisible(false);
           setIsEditMode(false);
           setCurrentSpot(null);
+          setCustomLocation(null);
           form.resetFields();
+          addressForm.resetFields();
         }}
-        width={650}
+        width={800}
       >
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="name"
-            label="Nom du spot"
-            rules={[{ required: true, message: 'Veuillez entrer un nom' }]}
-          >
-            <Input />
-          </Form.Item>
+        <Tabs 
+          defaultActiveKey="1" 
+          activeKey={activeTabKey}
+          onChange={key => setActiveTabKey(key)}
+        >
+          <Tabs.TabPane tab="Informations" key="1">
+            <Form form={form} layout="vertical">
+              <Form.Item
+                name="name"
+                label="Nom du spot"
+                rules={[{ required: true, message: 'Veuillez entrer un nom' }]}
+              >
+                <Input />
+              </Form.Item>
 
-          <Form.Item
-            name="description"
-            label="Description"
-            rules={[{ required: true, message: 'Veuillez entrer une description' }]}
-          >
-            <TextArea rows={4} />
-          </Form.Item>
+              <Form.Item
+                name="description"
+                label="Description"
+                rules={[{ required: true, message: 'Veuillez entrer une description' }]}
+              >
+                <TextArea rows={4} />
+              </Form.Item>
 
-          <Form.Item
-            name="type"
-            label="Type de spot"
-            rules={[{ required: true, message: 'Veuillez sélectionner un type' }]}
-          >
-            <Select>
-              <Option value="Rivière">Rivière</Option>
-              <Option value="Lac">Lac</Option>
-              <Option value="Étang">Étang</Option>
-              <Option value="Mer">Mer</Option>
-              <Option value="Port">Port</Option>
-              <Option value="Autre">Autre</Option>
-            </Select>
-          </Form.Item>
+              <Form.Item
+                name="type"
+                label="Type de spot"
+                rules={[{ required: true, message: 'Veuillez sélectionner un type' }]}
+              >
+                <Select>
+                  <Option value="Rivière">Rivière</Option>
+                  <Option value="Lac">Lac</Option>
+                  <Option value="Étang">Étang</Option>
+                  <Option value="Mer">Mer</Option>
+                  <Option value="Port">Port</Option>
+                  <Option value="Autre">Autre</Option>
+                </Select>
+              </Form.Item>
 
-          <Form.Item
-            name="fishTypes"
-            label="Types de poissons présents"
-            rules={[{ required: true, message: 'Veuillez sélectionner au moins un type de poisson' }]}
-          >
-            <Select mode="multiple" placeholder="Sélectionnez les types de poissons">
-              {Object.entries(FISH_TYPES_FR).map(([key, value]) => (
-                <Option key={key} value={key}>
-                  {value}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
+              <Form.Item
+                name="fishTypes"
+                label="Types de poissons présents"
+                rules={[{ required: true, message: 'Veuillez sélectionner au moins un type de poisson' }]}
+              >
+                <Select mode="multiple" placeholder="Sélectionnez les types de poissons">
+                  {Object.entries(FISH_TYPES_FR).map(([key, value]) => (
+                    <Option key={key} value={key}>
+                      {value}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Form>
+          </Tabs.TabPane>
           
-          <Form.Item label="Image du spot">
-            <Upload
-              name="image"
-              listType="picture-card"
-              className="avatar-uploader"
-              showUploadList={false}
-              beforeUpload={handleImageUpload}
-            >
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="spot"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                uploadButton
-              )}
-            </Upload>
-            <div style={{ marginTop: 8 }}>
-              <small>Format JPG/PNG, taille maximale 2MB</small>
-            </div>
-          </Form.Item>
-        </Form>
+          <Tabs.TabPane tab="Localisation" key="2">
+            <Form form={addressForm} layout="vertical">
+              <Form.Item 
+                name="address" 
+                label="Adresse" 
+                validateStatus={addressError ? 'error' : ''}
+                help={addressError}
+              >
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input 
+                    placeholder="Entrez une adresse" 
+                    style={{ width: 'calc(100% - 46px)' }}
+                  />
+                  <Button 
+                    type="primary" 
+                    icon={<SearchOutlined />} 
+                    onClick={handleAddressSearch}
+                    loading={isSearching}
+                  >
+                    {!isSearching && "Rechercher"}
+                  </Button>
+                </Space.Compact>
+              </Form.Item>
+              
+              <div style={{ marginTop: 8, marginBottom: 16, textAlign: 'center' }}>
+                <small>Ou sélectionnez l'emplacement précis sur la carte</small>
+              </div>
+              
+              <LocationPicker 
+                onChange={handleLocationChange} 
+                value={customLocation ? [customLocation.lat, customLocation.lng] : null} 
+              />
+            </Form>
+          </Tabs.TabPane>
+          
+          <Tabs.TabPane tab="Photo" key="3">
+            <Form.Item label="Image du spot">
+              <Upload
+                name="image"
+                listType="picture-card"
+                className="avatar-uploader"
+                showUploadList={false}
+                beforeUpload={handleImageUpload}
+              >
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="spot"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  uploadButton
+                )}
+              </Upload>
+              <div style={{ marginTop: 8 }}>
+                <small>Format JPG/PNG, taille maximale 50MB</small>
+              </div>
+            </Form.Item>
+          </Tabs.TabPane>
+        </Tabs>
       </Modal>
     </div>
   );
