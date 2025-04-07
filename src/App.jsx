@@ -1,15 +1,23 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import MapPage from './pages/MapPage';
 import CatchesPage from './pages/CatchesPage';
 import SpotsPage from './pages/SpotsPage';
 import CommunityPage from './pages/CommunityPage';
 import ProfilePage from './pages/ProfilePage';
+import { initializeApp } from './utils/initializeApp';
 
 function App() {
   const [theme, setTheme] = useState('light');
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Initialiser l'application au démarrage
+  useEffect(() => {
+    const initialized = initializeApp();
+    setIsInitialized(true);
+  }, []);
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
