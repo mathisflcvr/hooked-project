@@ -22,6 +22,7 @@
     "firebase": "^11.6.0",
     "leaflet": "^1.9.4",
     "moment": "^2.30.1",
+    "openweathermap-js": "^1.0.1",
     "postcss": "^8.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
