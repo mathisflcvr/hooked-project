@@ -4,7 +4,26 @@ export const FISHING_TYPES = {
   FLY: 'fly',
   COARSE: 'coarse',
   SURF: 'surf',
-  ICE: 'ice'
+  ICE: 'ice',
+  TROLLING: 'trolling',      // Pêche à la traîne
+  SPEARFISHING: 'spearfishing', // Pêche au harpon
+  HANDLINE: 'handline',      // Pêche à la ligne à main
+  LONGLINE: 'longline',      // Pêche à la palangre
+  JIGGING: 'jigging'         // Pêche au jig
+};
+
+// Traduction des types de pêche
+export const FISHING_TYPES_FR = {
+  [FISHING_TYPES.CASTING]: 'Lancer',
+  [FISHING_TYPES.FLY]: 'Mouche',
+  [FISHING_TYPES.COARSE]: 'Coup',
+  [FISHING_TYPES.SURF]: 'Surfcasting',
+  [FISHING_TYPES.ICE]: 'Glace',
+  [FISHING_TYPES.TROLLING]: 'Traîne',
+  [FISHING_TYPES.SPEARFISHING]: 'Harpon',
+  [FISHING_TYPES.HANDLINE]: 'Ligne à main',
+  [FISHING_TYPES.LONGLINE]: 'Palangre',
+  [FISHING_TYPES.JIGGING]: 'Jig'
 };
 
 // Types d'eau
@@ -171,6 +190,7 @@ export const createCatch = (data) => ({
   weight: data.weight,
   length: data.length,
   notes: data.notes,
+  catchDate: data.catchDate || new Date().toISOString(), // Date de la capture
   createdAt: data.createdAt || new Date().toISOString(),
   createdBy: data.createdBy
 });

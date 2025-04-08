@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
@@ -7,6 +7,7 @@ import CatchesPage from './pages/CatchesPage';
 import SpotsPage from './pages/SpotsPage';
 import CommunityPage from './pages/CommunityPage';
 import ProfilePage from './pages/ProfilePage';
+import LoginPage from './pages/LoginPage';
 import { initializeApp } from './utils/initializeApp';
 import { storageService } from './services/storageService';
 
@@ -77,15 +78,35 @@ function App() {
       }}
     >
       <Router>
-        <Layout theme={theme} toggleTheme={toggleTheme}>
-          <Routes>
-            <Route path="/" element={<MapPage />} />
-            <Route path="/spots" element={<SpotsPage />} />
-            <Route path="/catches" element={<CatchesPage />} />
-            <Route path="/community" element={<CommunityPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-          </Routes>
-        </Layout>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<Navigate to="/map" replace />} />
+          <Route path="/map" element={
+            <Layout theme={theme} toggleTheme={toggleTheme}>
+              <MapPage />
+            </Layout>
+          } />
+          <Route path="/spots" element={
+            <Layout theme={theme} toggleTheme={toggleTheme}>
+              <SpotsPage />
+            </Layout>
+          } />
+          <Route path="/catches" element={
+            <Layout theme={theme} toggleTheme={toggleTheme}>
+              <CatchesPage />
+            </Layout>
+          } />
+          <Route path="/community" element={
+            <Layout theme={theme} toggleTheme={toggleTheme}>
+              <CommunityPage />
+            </Layout>
+          } />
+          <Route path="/profile" element={
+            <Layout theme={theme} toggleTheme={toggleTheme}>
+              <ProfilePage />
+            </Layout>
+          } />
+        </Routes>
       </Router>
     </ConfigProvider>
   );

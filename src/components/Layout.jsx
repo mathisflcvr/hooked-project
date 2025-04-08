@@ -1,6 +1,7 @@
 import { Layout as AntLayout, Menu, Button, theme, Typography } from 'antd';
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import Header from './Header';
 import {
   HomeOutlined,
   CameraOutlined,
@@ -10,7 +11,7 @@ import {
   EnvironmentOutlined
 } from '@ant-design/icons';
 
-const { Header, Content, Sider } = AntLayout;
+const { Content, Sider } = AntLayout;
 const { Title } = Typography;
 
 const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
@@ -31,9 +32,9 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
 
   const menuItems = [
     {
-      key: '/',
+      key: '/map',
       icon: <HomeOutlined />,
-      label: <Link to="/">Carte</Link>,
+      label: <Link to="/map">Carte</Link>,
     },
     {
       key: '/spots',
@@ -96,8 +97,9 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
         />
       </Sider>
       <AntLayout style={{ marginLeft: collapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
-        <Header style={{ 
-          padding: '0 16px', 
+        <Header />
+        <div style={{ 
+          padding: '15px 24px', 
           background: colorBgContainer,
           boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
           display: 'flex',
@@ -106,7 +108,7 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
         }}>
           <div>
             <Title level={4} style={{ margin: 0 }}>
-              {location.pathname === '/' && 'Carte des Spots'}
+              {location.pathname === '/map' && 'Carte des Spots'}
               {location.pathname === '/spots' && 'Mes Spots'}
               {location.pathname === '/catches' && 'Mes Captures'}
               {location.pathname === '/community' && 'Communauté'}
@@ -119,7 +121,7 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
             onClick={toggleTheme}
             style={{ fontSize: '16px' }}
           />
-        </Header>
+        </div>
         <Content style={{ 
           margin: '24px 16px', 
           padding: 24, 

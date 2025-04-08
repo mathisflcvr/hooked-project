@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, List, Button, Modal, Form, Input, Select, Upload, message, Empty, Tabs, Radio, Space, Popconfirm } from 'antd';
+import { Card, List, Button, Modal, Form, Input, Select, Upload, message, Empty, Tabs, Radio, Space, Popconfirm, DatePicker } from 'antd';
 import { UploadOutlined, CameraOutlined, PlusOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { imageService } from '../services/imageService';
@@ -10,11 +10,16 @@ import {
   FISH_TYPES_FR, 
   WATER_TYPES, 
   WATER_TYPES_FR, 
-  FISH_BY_WATER_TYPE 
+  FISH_BY_WATER_TYPE,
+  FISHING_TYPES,
+  FISHING_TYPES_FR
 } from '../models/dataModels';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { userService } from '../services/userService';
+import locale from 'antd/es/date-picker/locale/fr_FR';
+import moment from 'moment';
+import 'moment/locale/fr';
 
 const { TextArea } = Input;
 const { TabPane } = Tabs;
@@ -169,7 +174,8 @@ const CatchesPage = () => {
       weather: catchItem.weather,
       weight: catchItem.weight,
       length: catchItem.length,
-      notes: catchItem.notes
+      notes: catchItem.notes,
+      catchDate: catchItem.catchDate ? moment(catchItem.catchDate) : undefined
     });
     
     // Remplir l'adresse si disponible
@@ -435,6 +441,7 @@ const CatchesPage = () => {
                           </a>
                         </p>
                       )}
+                      <p><strong>Date de capture:</strong> {item.catchDate ? new Date(item.catchDate).toLocaleDateString() : 'Non spécifiée'}</p>
                       <p><strong>Appât:</strong> {item.bait}</p>
                       <p><strong>Technique:</strong> {item.technique}</p>
                       <p><strong>Météo:</strong> {item.weather}</p>
@@ -547,6 +554,19 @@ const CatchesPage = () => {
                 rules={[{ required: true, message: 'Veuillez entrer les conditions météo' }]}
               >
                 <Input />
+              </Form.Item>
+
+              <Form.Item 
+                name="catchDate" 
+                label="Date de la capture"
+                rules={[{ required: true, message: 'Veuillez sélectionner la date de capture' }]}
+              >
+                <DatePicker 
+                  format="DD/MM/YYYY" 
+                  placeholder="Sélectionnez une date" 
+                  style={{ width: '100%' }}
+                  locale={locale}
+                />
               </Form.Item>
 
               <Form.Item name="weight" label="Poids (kg)">
