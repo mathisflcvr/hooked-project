@@ -1,50 +1,249 @@
 import { supabase } from '../lib/supabase';
+import { createCatch } from '../models/dataModels';
 
+/**
+ * Service pour gérer les captures avec Supabase
+ */
 export const catchService = {
   /**
-   * Récupère toutes les captures d'un utilisateur
-   * @param {string} userId - ID de l'utilisateur (optionnel, utilise l'utilisateur actuel par défaut)
+   * Récupère toutes les captures
    * @returns {Promise<Array>} Liste des captures
    */
-  async getUserCatches(userId = null) {
+  async getAllCatches() {
     try {
-      // Si aucun userId n'est fourni, utiliser l'utilisateur actuel
-      let targetUserId = userId;
-      if (!targetUserId) {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) {
-          throw new Error('Utilisateur non connecté');
-        }
-        targetUserId = userData.user.id;
-      }
-      
       const { data, error } = await supabase
         .from('catches')
-        .select(`
-          *,
-          spots(id, name, location, water_type)
-        `)
-        .eq('user_id', targetUserId)
-        .order('catch_date', { ascending: false });
+        .select('*');
       
       if (error) {
-        console.error(`Erreur lors de la récupération des captures pour l'utilisateur ${targetUserId}:`, error);
+        console.error('Erreur lors de la récupération des captures:', error);
+        throw error;
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Erreur dans getAllCatches:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Récupère les captures de l'utilisateur connecté
+   * @returns {Promise<Array>} Liste des captures de l'utilisateur
+   */
+  async getCurrentUserCatches() {
+    try {
+      // Récupérer l'utilisateur actuel
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        throw new Error('Utilisateur non connecté');
+      }
+
+      const { data, error } = await supabase
+        .from('catches')
+        .select('*')
+        .eq('created_by', authData.user.id);
+      
+      if (error) {
+        console.error('Erreur lors de la récupération des captures utilisateur:', error);
+        throw error;
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Erreur dans getCurrentUserCatches:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Récupère les captures d'un utilisateur par son ID
+   * @param {string} userId - ID de l'utilisateur
+   * @returns {Promise<Array>} Liste des captures de l'utilisateur
+   */
+  async getUserCatches(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('catches')
+        .select('*')
+        .eq('created_by', userId);
+      
+      if (error) {
+        console.error(`Erreur lors de la récupération des captures pour l'utilisateur ${userId}:`, error);
         throw error;
       }
       
       return data || [];
     } catch (error) {
       console.error('Erreur dans getUserCatches:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Ajoute une nouvelle capture
+   * @param {Object} catchData - Données de la capture
+   * @returns {Promise<Object>} Capture créée
+   */
+  async addCatch(catchData) {
+    try {
+      // Récupérer l'utilisateur actuel
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        throw new Error('Utilisateur non connecté');
+      }
+
+      // Créer la nouvelle capture avec l'ID utilisateur de Supabase
+      const newCatch = createCatch({
+        ...catchData,
+        createdBy: authData.user.id
+      });
+
+      // Insérer dans la base de données Supabase
+      const { data, error } = await supabase
+        .from('catches')
+        .insert([
+          {
+            spot_name: newCatch.spotId,
+            fishes: newCatch.fishes,
+            bait: newCatch.bait,
+            fishing_type: newCatch.fishingType,
+            weather: newCatch.weather,
+            water_type: newCatch.waterType,
+            photo: newCatch.photo,
+            notes: newCatch.notes,
+            catch_date: newCatch.catchDate,
+            created_at: newCatch.createdAt,
+            created_by: authData.user.id
+          }
+        ])
+        .select();
+      
+      if (error) {
+        console.error('Erreur lors de l\'ajout de la capture:', error);
+        throw error;
+      }
+      
+      return data[0];
+    } catch (error) {
+      console.error('Erreur dans addCatch:', error);
       throw error;
     }
   },
-  
+
+  /**
+   * Met à jour une capture existante
+   * @param {Object} catchData - Données de la capture à mettre à jour
+   * @returns {Promise<Object>} Capture mise à jour
+   */
+  async updateCatch(catchData) {
+    try {
+      // Récupérer l'utilisateur actuel pour vérification
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        throw new Error('Utilisateur non connecté');
+      }
+
+      // Vérifier si la capture appartient à l'utilisateur
+      const { data: catchCheck, error: checkError } = await supabase
+        .from('catches')
+        .select('created_by')
+        .eq('id', catchData.id)
+        .single();
+      
+      if (checkError) {
+        console.error('Erreur lors de la vérification de la capture:', checkError);
+        throw checkError;
+      }
+
+      // Sécurité: vérifier que l'utilisateur actuel est bien le propriétaire de la capture
+      if (catchCheck && catchCheck.created_by !== authData.user.id) {
+        throw new Error('Vous n\'êtes pas autorisé à modifier cette capture');
+      }
+
+      // Mettre à jour la capture
+      const { data, error } = await supabase
+        .from('catches')
+        .update({
+          spot_name: catchData.spotId,
+          fishes: catchData.fishes,
+          bait: catchData.bait,
+          fishing_type: catchData.fishingType,
+          weather: catchData.weather,
+          water_type: catchData.waterType,
+          photo: catchData.photo,
+          notes: catchData.notes,
+          catch_date: catchData.catchDate
+        })
+        .eq('id', catchData.id)
+        .select();
+      
+      if (error) {
+        console.error('Erreur lors de la mise à jour de la capture:', error);
+        throw error;
+      }
+      
+      return data[0];
+    } catch (error) {
+      console.error('Erreur dans updateCatch:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Supprime une capture
+   * @param {string} catchId - ID de la capture à supprimer
+   * @returns {Promise<boolean>} true si la suppression a réussi
+   */
+  async deleteCatch(catchId) {
+    try {
+      // Récupérer l'utilisateur actuel pour vérification
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        throw new Error('Utilisateur non connecté');
+      }
+
+      // Vérifier si la capture appartient à l'utilisateur
+      const { data: catchCheck, error: checkError } = await supabase
+        .from('catches')
+        .select('created_by')
+        .eq('id', catchId)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') { // Ignorer l'erreur "No rows found"
+        console.error('Erreur lors de la vérification de la capture:', checkError);
+        throw checkError;
+      }
+
+      // Sécurité: vérifier que l'utilisateur actuel est bien le propriétaire de la capture
+      if (catchCheck && catchCheck.created_by !== authData.user.id) {
+        throw new Error('Vous n\'êtes pas autorisé à supprimer cette capture');
+      }
+
+      // Supprimer la capture
+      const { error } = await supabase
+        .from('catches')
+        .delete()
+        .eq('id', catchId);
+      
+      if (error) {
+        console.error('Erreur lors de la suppression de la capture:', error);
+        throw error;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Erreur dans deleteCatch:', error);
+      throw error;
+    }
+  },
+
   /**
    * Récupère les captures pour un spot spécifique
-   * @param {string} spotId - ID du spot
+   * @param {string} spotName - Nom du spot
    * @returns {Promise<Array>} Liste des captures
    */
-  async getSpotCatches(spotId) {
+  async getSpotCatches(spotName) {
     try {
       const { data, error } = await supabase
         .from('catches')
@@ -52,11 +251,11 @@ export const catchService = {
           *,
           profiles(id, username, avatar_url)
         `)
-        .eq('spot_id', spotId)
+        .eq('spot_name', spotName)
         .order('catch_date', { ascending: false });
       
       if (error) {
-        console.error(`Erreur lors de la récupération des captures pour le spot ${spotId}:`, error);
+        console.error(`Erreur lors de la récupération des captures pour le spot ${spotName}:`, error);
         throw error;
       }
       
@@ -78,8 +277,7 @@ export const catchService = {
         .from('catches')
         .select(`
           *,
-          profiles(id, username, avatar_url),
-          spots(id, name, location, water_type)
+          profiles(id, username, avatar_url)
         `)
         .eq('id', catchId)
         .single();
@@ -92,92 +290,6 @@ export const catchService = {
       return data;
     } catch (error) {
       console.error('Erreur dans getCatchById:', error);
-      throw error;
-    }
-  },
-  
-  /**
-   * Crée une nouvelle capture
-   * @param {Object} catchData - Données de la capture
-   * @returns {Promise<Object>} Capture créée
-   */
-  async createCatch(catchData) {
-    try {
-      // Vérifier que l'utilisateur est connecté
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        throw new Error('Utilisateur non connecté');
-      }
-      
-      // Ajouter l'ID de l'utilisateur
-      const newCatch = {
-        ...catchData,
-        user_id: userData.user.id
-      };
-      
-      const { data, error } = await supabase
-        .from('catches')
-        .insert([newCatch])
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('Erreur lors de la création de la capture:', error);
-        throw error;
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Erreur dans createCatch:', error);
-      throw error;
-    }
-  },
-  
-  /**
-   * Met à jour une capture existante
-   * @param {string} catchId - ID de la capture
-   * @param {Object} updates - Données à mettre à jour
-   * @returns {Promise<Object>} Capture mise à jour
-   */
-  async updateCatch(catchId, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('catches')
-        .update(updates)
-        .eq('id', catchId)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error(`Erreur lors de la mise à jour de la capture ${catchId}:`, error);
-        throw error;
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Erreur dans updateCatch:', error);
-      throw error;
-    }
-  },
-  
-  /**
-   * Supprime une capture
-   * @param {string} catchId - ID de la capture
-   * @returns {Promise<void>}
-   */
-  async deleteCatch(catchId) {
-    try {
-      const { error } = await supabase
-        .from('catches')
-        .delete()
-        .eq('id', catchId);
-      
-      if (error) {
-        console.error(`Erreur lors de la suppression de la capture ${catchId}:`, error);
-        throw error;
-      }
-    } catch (error) {
-      console.error('Erreur dans deleteCatch:', error);
       throw error;
     }
   },
@@ -318,8 +430,8 @@ export const catchService = {
         stats.catchesPerMonth[monthKey]++;
         
         // Spots visités
-        if (catchItem.spot_id) {
-          stats.spotsVisited.add(catchItem.spot_id);
+        if (catchItem.spot_name) {
+          stats.spotsVisited.add(catchItem.spot_name);
         }
         
         // Poids et taille
@@ -351,12 +463,13 @@ export const catchService = {
       // Récupérer les spots récents (limité à 5)
       const recentSpotsSet = new Set();
       for (const catchItem of catches) {
-        if (catchItem.spot_id && !recentSpotsSet.has(catchItem.spot_id)) {
-          recentSpotsSet.add(catchItem.spot_id);
+        if (catchItem.spot_name && !recentSpotsSet.has(catchItem.spot_name)) {
+          recentSpotsSet.add(catchItem.spot_name);
           
-          if (catchItem.spots) {
-            stats.recentSpots.push(catchItem.spots);
-          }
+          // Créer un objet de spot simplifié à partir du nom du spot
+          stats.recentSpots.push({
+            name: catchItem.spot_name
+          });
           
           if (stats.recentSpots.length >= 5) break;
         }

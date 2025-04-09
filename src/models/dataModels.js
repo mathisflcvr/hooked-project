@@ -210,7 +210,7 @@ export const createCaughtFish = (data) => ({
 // Modèle pour une capture
 export const createCatch = (data) => ({
   id: data.id || Date.now().toString(),
-  spotId: data.spotId,
+  spotId: data.spotId, // Conservé pour compatibilité, mais contient maintenant le nom du spot
   // La localisation vient maintenant du spot associé
   address: data.address || null, // Adresse textuelle (optionnelle)
   fishes: data.fishes || [], // Liste des poissons capturés
