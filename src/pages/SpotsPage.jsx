@@ -7,23 +7,9 @@ import { imageService } from '../services/imageService';
 import { geocodingService } from '../services/geocodingService';
 import { weatherService } from '../services/weatherService';
 import { createSpot } from '../models/dataModels';
-import { FISH_TYPES, FISH_TYPES_FR, FISHING_TYPES, WATER_TYPES, WATER_TYPES_FR, FISH_BY_WATER_TYPE } from '../models/dataModels';
+import { FISH_TYPES, FISH_TYPES_FR } from '../models/dataModels';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-
-// Traduction des types de pêche
-const FISHING_TYPES_FR = {
-  [FISHING_TYPES.CASTING]: 'Lancer',
-  [FISHING_TYPES.FLY]: 'Mouche',
-  [FISHING_TYPES.COARSE]: 'Coup',
-  [FISHING_TYPES.SURF]: 'Surfcasting',
-  [FISHING_TYPES.ICE]: 'Glace',
-  [FISHING_TYPES.TROLLING]: 'Traîne',
-  [FISHING_TYPES.SPEARFISHING]: 'Harpon',
-  [FISHING_TYPES.HANDLINE]: 'Ligne à main',
-  [FISHING_TYPES.LONGLINE]: 'Palangre',
-  [FISHING_TYPES.JIGGING]: 'Jig'
-};
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -99,11 +85,6 @@ const SpotsPage = () => {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastDetails, setForecastDetails] = useState(null);
   const [isForecastModalVisible, setIsForecastModalVisible] = useState(false);
-  const [filters, setFilters] = useState({
-    fishingType: '',
-    fishType: '',
-    waterType: ''
-  });
 
   useEffect(() => {
     loadSpots();
@@ -331,14 +312,11 @@ const SpotsPage = () => {
   );
 
   // Regrouper les spots par type
-  const spotsByType = {};
-  filteredSpots.forEach((spot) => {
-    const type = spot.type || 'Autre';
-    if (!spotsByType[type]) {
-      spotsByType[type] = [];
-    }
-    spotsByType[type].push(spot);
-  });
+  const spotsByType = spots.reduce((acc, spot) => {
+    acc[spot.type] = acc[spot.type] || [];
+    acc[spot.type].push(spot);
+    return acc;
+  }, {});
 
   // Nouvelle fonction pour charger les prévisions météo
   const loadSpotForecasts = async (spotsToForecast, forceRefresh = false) => {
@@ -514,6 +492,7 @@ const SpotsPage = () => {
                 <Statistic
                   title="Nuages"
                   value={details.precipitation.cloudCover}
+                  precision={1}
                   suffix="%"
                   valueStyle={{ color: '#8c8c8c' }}
                 />
@@ -536,6 +515,7 @@ const SpotsPage = () => {
                 <Statistic
                   title="Pression atmosph."
                   value={details.pressure.value}
+                  precision={1}
                   suffix="hPa"
                   valueStyle={{ color: '#eb2f96' }}
                 />
@@ -761,161 +741,97 @@ const SpotsPage = () => {
     );
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters({ ...filters, [key]: value });
-  };
-
-  // Filtrer les spots en fonction des filtres sélectionnés
-  const filteredSpots = spots.filter(spot => {
-    return (
-      (!filters.fishingType || spot.fishingType === filters.fishingType) &&
-      (!filters.fishType || (spot.fishTypes && spot.fishTypes.includes(filters.fishType))) &&
-      (!filters.waterType || spot.waterType === filters.waterType)
-    );
-  });
-
   return (
-    <div className="spots-page">
-      <Card title="Mes Spots de Pêche" className="spots-card" bordered={false}
+    <div>
+      <Card
+        title="Mes Spots de Pêche"
         extra={
           <Space>
             <Button 
               icon={<CloudOutlined />} 
-              onClick={() => loadSpotForecasts(filteredSpots, true)} 
+              onClick={() => loadSpotForecasts(spots, true)} 
               loading={forecastLoading}
             >
               Actualiser prévisions
             </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+              setIsEditMode(false);
+              setCurrentSpot(null);
+              setImageUrl('');
+              setCustomLocation(null);
+              form.resetFields();
+              addressForm.resetFields();
+              setIsModalVisible(true);
+            }}>
+              Ajouter un spot
+            </Button>
           </Space>
         }
+        style={{ borderRadius: '8px' }}
       >
-        {/* Filtres */}
-        <Card style={{ marginBottom: 16, borderRadius: '8px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-            <Form.Item label="Type d'eau" style={{ margin: 0, minWidth: '200px' }}>
-              <Select 
-                placeholder="Filtrer par type d'eau"
-                allowClear
-                onChange={(value) => handleFilterChange('waterType', value)}
-                value={filters.waterType}
-              >
-                {Object.entries(WATER_TYPES_FR).map(([key, value]) => (
-                  <Select.Option key={key} value={key}>{value}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-            <Form.Item label="Type de pêche" style={{ margin: 0, minWidth: '200px' }}>
-              <Select 
-                placeholder="Filtrer par type de pêche"
-                allowClear
-                onChange={(value) => handleFilterChange('fishingType', value)}
-                value={filters.fishingType}
-              >
-                {Object.entries(FISHING_TYPES_FR).map(([key, value]) => (
-                  <Select.Option key={key} value={key}>{value}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-            <Form.Item label="Type de poisson" style={{ margin: 0, minWidth: '200px' }}>
-              <Select 
-                placeholder="Filtrer par poisson"
-                allowClear
-                onChange={(value) => handleFilterChange('fishType', value)}
-                value={filters.fishType}
-              >
-                {Object.entries(FISH_TYPES_FR).map(([key, value]) => (
-                  <Select.Option key={key} value={key}>{value}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-            <Tooltip title="Ajoutez un nouveau spot de pêche">
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  setIsEditMode(false);
-                  setCurrentSpot(null);
-                  setImageUrl('');
-                  setCustomLocation(null);
-                  form.resetFields();
-                  addressForm.resetFields();
-                  setIsModalVisible(true);
-                }}
-                style={{ marginLeft: 'auto' }}
-              >
-                Ajouter un spot
-              </Button>
-            </Tooltip>
-          </div>
-        </Card>
-
-        {filteredSpots.length === 0 ? (
+        {spots.length === 0 ? (
           <Empty
-            description="Aucun spot trouvé pour ces filtres"
+            description="Vous n'avez pas encore enregistré de spots"
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
-          <Tabs defaultActiveKey="1" onChange={setActiveTabKey}>
-            <Tabs.TabPane tab="Tous les spots" key="1">
-              {Object.entries(spotsByType).map(([type, typeSpots]) => (
-                <div key={type} style={{ marginBottom: '24px' }}>
-                  <h3 style={{ margin: '16px 0' }}>{type}</h3>
-                  <List
-                    grid={{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 4 }}
-                    dataSource={typeSpots}
-                    renderItem={(item) => (
-                      <List.Item>
-                        <Card
-                          title={item.name}
-                          style={{ borderRadius: '8px' }}
-                          cover={item.image ? <img alt={item.name} src={item.image} style={{ height: 160, objectFit: 'cover' }} /> : null}
-                          extra={
-                            <Button 
-                              type="text"
-                              icon={favorites[item.id] ? <HeartFilled style={{ color: '#ff4d4f' }} /> : <HeartOutlined />}
-                              onClick={() => toggleFavorite(item.id)}
-                            />
-                          }
-                          actions={[
-                            <EditOutlined key="edit" onClick={() => handleEditSpot(item)} />,
-                            <Popconfirm
-                              title="Supprimer ce spot"
-                              description="Êtes-vous sûr de vouloir supprimer ce spot ?"
-                              onConfirm={() => handleDeleteSpot(item.id)}
-                              okText="Oui"
-                              cancelText="Non"
-                            >
-                              <DeleteOutlined key="delete" />
-                            </Popconfirm>,
-                            <a
-                              href={`https://www.google.com/maps?q=${item.location.lat},${item.location.lng}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <EnvironmentOutlined key="location" />
-                            </a>
-                          ]}
+          Object.entries(spotsByType).map(([type, typeSpots]) => (
+            <div key={type} style={{ marginBottom: '24px' }}>
+              <h3 style={{ margin: '16px 0' }}>{type}</h3>
+              <List
+                grid={{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 4 }}
+                dataSource={typeSpots}
+                renderItem={(item) => (
+                  <List.Item>
+                    <Card
+                      title={item.name}
+                      style={{ borderRadius: '8px' }}
+                      cover={item.image ? <img alt={item.name} src={item.image} style={{ height: 160, objectFit: 'cover' }} /> : null}
+                      extra={
+                        <Button 
+                          type="text"
+                          icon={favorites[item.id] ? <HeartFilled style={{ color: '#ff4d4f' }} /> : <HeartOutlined />}
+                          onClick={() => toggleFavorite(item.id)}
+                        />
+                      }
+                      actions={[
+                        <EditOutlined key="edit" onClick={() => handleEditSpot(item)} />,
+                        <Popconfirm
+                          title="Supprimer ce spot"
+                          description="Êtes-vous sûr de vouloir supprimer ce spot ?"
+                          onConfirm={() => handleDeleteSpot(item.id)}
+                          okText="Oui"
+                          cancelText="Non"
                         >
-                          <p>{item.description}</p>
-                          {item.address && <p><strong>Adresse:</strong> {item.address}</p>}
-                          
-                          <div style={{ marginTop: '12px' }}>
-                            {Array.isArray(item.fishTypes) && item.fishTypes.map((fishType) => (
-                              <Tag color="blue" key={fishType}>
-                                {FISH_TYPES_FR[fishType] || fishType}
-                              </Tag>
-                            ))}
-                          </div>
-                          
-                          {renderFishingScore(item)}
-                        </Card>
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              ))}
-            </Tabs.TabPane>
-          </Tabs>
+                          <DeleteOutlined key="delete" />
+                        </Popconfirm>,
+                        <a
+                          href={`https://www.google.com/maps?q=${item.location.lat},${item.location.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <EnvironmentOutlined /> Voir sur la carte
+                        </a>
+                      ]}
+                    >
+                      <p>{item.description}</p>
+                      {item.address && <p><strong>Adresse:</strong> {item.address}</p>}
+                      
+                      <div style={{ marginTop: '12px' }}>
+                        {Array.isArray(item.fishTypes) && item.fishTypes.map((fishType) => (
+                          <Tag color="blue" key={fishType}>
+                            {FISH_TYPES_FR[fishType] || fishType}
+                          </Tag>
+                        ))}
+                      </div>
+                      
+                      {renderFishingScore(item)}
+                    </Card>
+                  </List.Item>
+                )}
+              />
+            </div>
+          ))
         )}
       </Card>
 
