@@ -507,159 +507,152 @@ const CatchesPage = () => {
         }}
         width={800}
       >
-        <Tabs 
-          activeKey={activeTabKey}
-          onChange={setActiveTabKey}
-        >
-          <Tabs.TabPane tab="Informations" key="1">
-            <Form form={form} layout="vertical">
-              <Form.Item
-                name="spotId"
-                label="Spot de pêche"
-                rules={[{ required: true, message: 'Veuillez sélectionner un spot' }]}
-              >
-                <Select>
-                  {storageService.getSpots().map((spot) => (
-                    <Select.Option key={spot.id} value={spot.id}>
-                      {spot.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="spotId"
+            label="Spot de pêche"
+            rules={[{ required: true, message: 'Veuillez sélectionner un spot' }]}
+          >
+            <Select>
+              {storageService.getSpots().map((spot) => (
+                <Select.Option key={spot.id} value={spot.id}>
+                  {spot.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
 
-              <Form.Item
-                name="bait"
-                label="Appât utilisé"
-                rules={[{ required: true, message: 'Veuillez entrer l\'appât utilisé' }]}
-              >
-                <Input />
-              </Form.Item>
+          <Form.Item
+            name="bait"
+            label="Appât utilisé"
+            rules={[{ required: true, message: 'Veuillez entrer l\'appât utilisé' }]}
+          >
+            <Input />
+          </Form.Item>
 
-              <Form.Item
-                name="technique"
-                label="Technique utilisée"
-                rules={[{ required: true, message: 'Veuillez entrer la technique utilisée' }]}
-              >
-                <Input />
-              </Form.Item>
+          <Form.Item
+            name="technique"
+            label="Technique utilisée"
+            rules={[{ required: true, message: 'Veuillez entrer la technique utilisée' }]}
+          >
+            <Input />
+          </Form.Item>
 
-              <Form.Item
-                name="weather"
-                label="Conditions météo"
-                rules={[{ required: true, message: 'Veuillez entrer les conditions météo' }]}
-              >
-                <Input />
-              </Form.Item>
+          <Form.Item
+            name="weather"
+            label="Conditions météo"
+            rules={[{ required: true, message: 'Veuillez entrer les conditions météo' }]}
+          >
+            <Input />
+          </Form.Item>
 
-              <Form.Item 
-                name="catchDate" 
-                label="Date de la capture"
-                rules={[{ required: true, message: 'Veuillez sélectionner la date de capture' }]}
-              >
-                <DatePicker 
-                  format="DD/MM/YYYY" 
-                  placeholder="Sélectionnez une date" 
-                  style={{ width: '100%' }}
-                  locale={locale}
-                />
-              </Form.Item>
+          <Form.Item 
+            name="catchDate" 
+            label="Date de la capture"
+            rules={[{ required: true, message: 'Veuillez sélectionner la date de capture' }]}
+          >
+            <DatePicker 
+              format="DD/MM/YYYY" 
+              placeholder="Sélectionnez une date" 
+              style={{ width: '100%' }}
+              locale={locale}
+            />
+          </Form.Item>
 
-              <Form.Item name="notes" label="Notes">
-                <TextArea rows={4} />
-              </Form.Item>
-            </Form>
+          <Form.Item name="notes" label="Notes">
+            <TextArea rows={4} />
+          </Form.Item>
+        </Form>
 
-            <Divider orientation="left">Poissons capturés</Divider>
-            {renderFishList()}
-          </Tabs.TabPane>
-          
-          <Tabs.TabPane tab="Ajouter un poisson" key="2">
-            <Form form={fishForm} layout="vertical">
-              <Form.Item label="Type d'eau" required>
-                <Radio.Group value={waterType} onChange={handleWaterTypeChange}>
-                  {Object.entries(WATER_TYPES_FR).map(([key, value]) => (
-                    <Radio.Button key={key} value={key}>{value}</Radio.Button>
-                  ))}
-                </Radio.Group>
-              </Form.Item>
+        <Divider orientation="left">Photo de la capture</Divider>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <Upload
+            name="photo"
+            listType="picture-card"
+            className="avatar-uploader"
+            showUploadList={false}
+            beforeUpload={handleImageUpload}
+          >
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt="capture"
+                style={{ width: '100%', maxHeight: '150px', objectFit: 'cover' }}
+              />
+            ) : (
+              uploadButton
+            )}
+          </Upload>
+          <div style={{ marginTop: 8 }}>
+            <small>Format JPG/PNG, taille maximale 50MB</small>
+          </div>
+        </div>
 
-              <Form.Item
-                name="fishType"
-                label="Type de poisson"
-                rules={[{ required: true, message: 'Veuillez sélectionner un type' }]}
-              >
-                <Select onChange={handleFishTypeChange}>
-                  <Select.OptGroup label={WATER_TYPES_FR[waterType]}>
-                    {FISH_BY_WATER_TYPE[waterType].map((fishType) => (
-                      <Select.Option key={fishType} value={fishType}>
-                        {FISH_TYPES_FR[fishType]}
-                      </Select.Option>
-                    ))}
-                  </Select.OptGroup>
-                  <Select.Option value="custom">
-                    {getCustomFishLabel(waterType)}
+        <Divider orientation="left">Ajouter un poisson</Divider>
+        <Form form={fishForm} layout="vertical">
+          <Form.Item label="Type d'eau" required>
+            <Radio.Group value={waterType} onChange={handleWaterTypeChange}>
+              {Object.entries(WATER_TYPES_FR).map(([key, value]) => (
+                <Radio.Button key={key} value={key}>{value}</Radio.Button>
+              ))}
+            </Radio.Group>
+          </Form.Item>
+
+          <Form.Item
+            name="fishType"
+            label="Type de poisson"
+            rules={[{ required: true, message: 'Veuillez sélectionner un type' }]}
+          >
+            <Select onChange={handleFishTypeChange}>
+              <Select.OptGroup label={WATER_TYPES_FR[waterType]}>
+                {FISH_BY_WATER_TYPE[waterType].map((fishType) => (
+                  <Select.Option key={fishType} value={fishType}>
+                    {FISH_TYPES_FR[fishType]}
                   </Select.Option>
-                </Select>
-              </Form.Item>
+                ))}
+              </Select.OptGroup>
+              <Select.Option value="custom">
+                {getCustomFishLabel(waterType)}
+              </Select.Option>
+            </Select>
+          </Form.Item>
 
-              {showCustomFishInput && (
-                <Form.Item
-                  name="customFishType"
-                  label="Nom du poisson personnalisé"
-                  rules={[{ required: true, message: 'Veuillez entrer un nom' }]}
-                >
-                  <Input placeholder="Entrez le nom du poisson" />
-                </Form.Item>
-              )}
+          {showCustomFishInput && (
+            <Form.Item
+              name="customFishType"
+              label="Nom du poisson personnalisé"
+              rules={[{ required: true, message: 'Veuillez entrer un nom' }]}
+            >
+              <Input placeholder="Entrez le nom du poisson" />
+            </Form.Item>
+          )}
 
-              <Form.Item
-                name="fishName"
-                label="Nom du poisson (optionnel)"
-              >
-                <Input placeholder="Donnez un nom à votre poisson" />
-              </Form.Item>
+          <Form.Item
+            name="fishName"
+            label="Nom du poisson (optionnel)"
+          >
+            <Input placeholder="Donnez un nom à votre poisson" />
+          </Form.Item>
 
-              <Form.Item name="weight" label="Poids (kg)">
-                <Input type="number" step="0.1" />
-              </Form.Item>
+          <Space>
+            <Form.Item name="weight" label="Poids (kg)" style={{ marginBottom: 0 }}>
+              <Input type="number" step="0.1" />
+            </Form.Item>
 
-              <Form.Item name="length" label="Taille (cm)">
-                <Input type="number" />
-              </Form.Item>
+            <Form.Item name="length" label="Taille (cm)" style={{ marginBottom: 0 }}>
+              <Input type="number" />
+            </Form.Item>
+          </Space>
 
-              <Form.Item>
-                <Button type="primary" icon={<PlusOutlined />} onClick={handleAddFish}>
-                  Ajouter ce poisson
-                </Button>
-              </Form.Item>
-            </Form>
-          </Tabs.TabPane>
-          
-          <Tabs.TabPane tab="Photo" key="3">
-            <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <Upload
-                name="photo"
-                listType="picture-card"
-                className="avatar-uploader"
-                showUploadList={false}
-                beforeUpload={handleImageUpload}
-              >
-                {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt="capture"
-                    style={{ width: '100%', maxHeight: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  uploadButton
-                )}
-              </Upload>
-              <div style={{ marginTop: 8 }}>
-                <small>Format JPG/PNG, taille maximale 50MB</small>
-              </div>
-            </div>
-          </Tabs.TabPane>
-        </Tabs>
+          <Form.Item style={{ marginTop: 16 }}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddFish}>
+              Ajouter ce poisson
+            </Button>
+          </Form.Item>
+        </Form>
+
+        <Divider orientation="left">Poissons capturés</Divider>
+        {renderFishList()}
       </Modal>
     </div>
   );
