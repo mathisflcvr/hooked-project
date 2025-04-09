@@ -26,10 +26,7 @@ const Header = () => {
     }}>
       <div className="logo" style={{ height: '38px', margin: '16px 0', display: 'flex', alignItems: 'center' }}>
         <Link to="/map" style={{ display: 'flex', alignItems: 'center' }}>
-          <Logo height={38} />
-          <span style={{ marginLeft: '10px', fontSize: '20px', fontWeight: 'bold', color: '#4285F4' }}>
-            Hooked
-          </span>
+          <Logo height={38} width="auto" />
         </Link>
       </div>
       

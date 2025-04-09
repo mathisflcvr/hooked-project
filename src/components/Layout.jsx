@@ -10,6 +10,7 @@ import {
   BulbOutlined,
   EnvironmentOutlined
 } from '@ant-design/icons';
+import Logo from './Logo';
 
 const { Content, Sider } = AntLayout;
 const { Title } = Typography;
@@ -83,11 +84,34 @@ const Layout = ({ children, theme: currentTheme, toggleTheme }) => {
           textAlign: 'center',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          overflow: 'hidden',
+          transition: 'all 0.3s'
         }}>
-          <Title level={4} style={{ margin: 0, color: currentTheme === 'dark' ? 'white' : 'inherit' }}>
-            {!collapsed && 'Hooked'}
-          </Title>
+          {collapsed ? (
+            <img 
+              src="/images/hook-mini.svg" 
+              alt="Hooked Mini Logo" 
+              height="36"
+              style={{ 
+                display: 'inline-block',
+                marginTop: '6px',
+                marginLeft: '2px',
+                transition: 'all 0.3s',
+                filter: currentTheme === 'dark' ? 'brightness(1.5)' : 'none'
+              }}
+            />
+          ) : (
+            <div style={{ transition: 'all 0.3s', padding: '0 10px' }}>
+              <Logo 
+                height="40" 
+                width="auto" 
+                style={{
+                  filter: currentTheme === 'dark' ? 'brightness(1.2)' : 'none'
+                }}
+              />
+            </div>
+          )}
         </div>
         <Menu
           theme={currentTheme === 'dark' ? 'dark' : 'light'}
