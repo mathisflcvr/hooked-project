@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, List, Button, Modal, Form, Input, Select, message, Empty, Tag, Upload, Popconfirm, Space, Tabs } from 'antd';
-import { PlusOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, EditOutlined, DeleteOutlined, LoadingOutlined, SearchOutlined } from '@ant-design/icons';
+import { Card, List, Button, Modal, Form, Input, Select, message, Empty, Tag, Upload, Popconfirm, Space, Tabs, Progress, Tooltip, Row, Col, Divider, Statistic } from 'antd';
+import { PlusOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, EditOutlined, DeleteOutlined, LoadingOutlined, SearchOutlined, CloudOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { userService } from '../services/userService';
 import { imageService } from '../services/imageService';
 import { geocodingService } from '../services/geocodingService';
+import { weatherService } from '../services/weatherService';
 import { createSpot } from '../models/dataModels';
 import { FISH_TYPES, FISH_TYPES_FR } from '../models/dataModels';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
@@ -80,6 +81,10 @@ const SpotsPage = () => {
   const [addressError, setAddressError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [activeTabKey, setActiveTabKey] = useState('1');
+  const [spotForecasts, setSpotForecasts] = useState({});
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastDetails, setForecastDetails] = useState(null);
+  const [isForecastModalVisible, setIsForecastModalVisible] = useState(false);
 
   useEffect(() => {
     loadSpots();
@@ -91,6 +96,9 @@ const SpotsPage = () => {
     
     // Charger les favoris
     loadFavorites();
+    
+    // Charger les prévisions météo pour tous les spots
+    loadSpotForecasts(loadedSpots);
   };
   
   const loadFavorites = () => {
@@ -310,22 +318,435 @@ const SpotsPage = () => {
     return acc;
   }, {});
 
+  // Nouvelle fonction pour charger les prévisions météo
+  const loadSpotForecasts = async (spotsToForecast) => {
+    try {
+      setForecastLoading(true);
+      
+      // Vérifier si des spots sont disponibles
+      if (!spotsToForecast || spotsToForecast.length === 0) {
+        console.log('Aucun spot à analyser pour les prévisions météo');
+        return;
+      }
+
+      console.log(`Chargement des prévisions pour ${spotsToForecast.length} spots...`);
+      
+      // Récupérer les prévisions pour chaque spot (10 à la fois max pour éviter de surcharger l'API)
+      const forecasts = {};
+      const maxConcurrentRequests = 5;
+      
+      for (let i = 0; i < spotsToForecast.length; i += maxConcurrentRequests) {
+        const batch = spotsToForecast.slice(i, i + maxConcurrentRequests);
+        console.log(`Traitement du lot ${i / maxConcurrentRequests + 1}, ${batch.length} spots`);
+        
+        try {
+          const results = await Promise.all(
+            batch.map(spot => {
+              console.log(`Récupération prévision pour spot: ${spot.name}`);
+              return weatherService.getFishingForecast(spot)
+                .catch(error => {
+                  console.error(`Erreur pour le spot ${spot.name}:`, error);
+                  return { 
+                    spot: spot.id, 
+                    error: true,
+                    evaluation: { score: 0, recommendation: 'Erreur de chargement' }
+                  };
+                });
+            })
+          );
+          
+          results.forEach(result => {
+            if (result && result.spot) {
+              forecasts[result.spot] = result;
+            }
+          });
+        } catch (batchError) {
+          console.error('Erreur lors du traitement d\'un lot de spots:', batchError);
+        }
+      }
+      
+      console.log('Prévisions chargées:', Object.keys(forecasts).length);
+      setSpotForecasts(forecasts);
+      message.success(`Prévisions chargées pour ${Object.keys(forecasts).length} spots`);
+    } catch (error) {
+      console.error('Erreur lors du chargement des prévisions météo:', error);
+      message.error('Impossible de charger les prévisions météo');
+    } finally {
+      setForecastLoading(false);
+    }
+  };
+  
+  // Fonction pour ouvrir le modal avec les détails de la prévision
+  const showForecastDetails = (forecast, spot) => {
+    setForecastDetails({ ...forecast, spot });
+    setIsForecastModalVisible(true);
+  };
+
+  // Fonction pour fermer le modal de détails
+  const handleForecastModalClose = () => {
+    setIsForecastModalVisible(false);
+    setForecastDetails(null);
+  };
+  
+  // Rendu du modal de détails de la prévision
+  const renderForecastDetailsModal = () => {
+    if (!forecastDetails) return null;
+    
+    try {
+      const { evaluation, weather, marine, spot } = forecastDetails;
+      const { score, recommendation, details } = evaluation;
+      
+      return (
+        <Modal
+          title={`Prévision de pêche pour ${spot.name}`}
+          open={isForecastModalVisible}
+          onCancel={handleForecastModalClose}
+          footer={[
+            <Button key="close" onClick={handleForecastModalClose}>
+              Fermer
+            </Button>
+          ]}
+          width={800}
+        >
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <Progress
+              type="dashboard"
+              percent={score * 10}
+              format={percent => `${Math.round(percent / 10)}/10`}
+              width={120}
+              strokeColor={forecastDetails.colorCode}
+            />
+            <h3 style={{ marginTop: '10px', color: forecastDetails.colorCode }}>{recommendation}</h3>
+          </div>
+          
+          <Divider orientation="left">Conditions actuelles</Divider>
+          
+          <Row gutter={[16, 16]}>
+            {/* Température */}
+            <Col span={8}>
+              <Card size="small" title="Température">
+                <Statistic
+                  title="Air"
+                  value={details.temperature.air}
+                  precision={1}
+                  suffix="°C"
+                  valueStyle={{ color: '#1890ff' }}
+                />
+                <Statistic
+                  title="Eau"
+                  value={details.temperature.water}
+                  precision={1}
+                  suffix="°C"
+                  valueStyle={{ color: '#0050b3' }}
+                />
+                <div style={{ marginTop: '10px' }}>
+                  <Progress 
+                    percent={details.temperature.score * 10} 
+                    size="small"
+                    strokeColor={details.temperature.score >= 7 ? '#52c41a' : details.temperature.score >= 4 ? '#faad14' : '#f5222d'}
+                  />
+                  <small>Impact sur le score</small>
+                </div>
+              </Card>
+            </Col>
+            
+            {/* Vent */}
+            <Col span={8}>
+              <Card size="small" title="Vent">
+                <Statistic
+                  title="Vitesse"
+                  value={details.wind.speed}
+                  precision={1}
+                  suffix="km/h"
+                  valueStyle={{ color: '#722ed1' }}
+                />
+                {details.wind.direction && (
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <span
+                        style={{
+                          transform: `rotate(${details.wind.direction}deg)`,
+                          fontSize: '24px',
+                          display: 'inline-block'
+                        }}
+                      >
+                        ↑
+                      </span>
+                      <div>Direction: {details.wind.direction}°</div>
+                    </div>
+                  </div>
+                )}
+                <div style={{ marginTop: '10px' }}>
+                  <Progress 
+                    percent={details.wind.score * 10} 
+                    size="small"
+                    strokeColor={details.wind.score >= 7 ? '#52c41a' : details.wind.score >= 4 ? '#faad14' : '#f5222d'}
+                  />
+                  <small>Impact sur le score</small>
+                </div>
+              </Card>
+            </Col>
+            
+            {/* Précipitations */}
+            <Col span={8}>
+              <Card size="small" title="Précipitations">
+                <Statistic
+                  title="Type"
+                  value={details.precipitation.type || 'Aucune'}
+                  valueStyle={{ color: '#13c2c2' }}
+                />
+                {details.precipitation.amount > 0 && (
+                  <Statistic
+                    title="Intensité"
+                    value={details.precipitation.amount}
+                    precision={1}
+                    suffix="mm"
+                    valueStyle={{ color: '#13c2c2' }}
+                  />
+                )}
+                <Statistic
+                  title="Nuages"
+                  value={details.precipitation.cloudCover}
+                  suffix="%"
+                  valueStyle={{ color: '#8c8c8c' }}
+                />
+                <div style={{ marginTop: '10px' }}>
+                  <Progress 
+                    percent={details.precipitation.score * 10} 
+                    size="small"
+                    strokeColor={details.precipitation.score >= 7 ? '#52c41a' : details.precipitation.score >= 4 ? '#faad14' : '#f5222d'}
+                  />
+                  <small>Impact sur le score</small>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+          
+          <Row gutter={[16, 16]} style={{ marginTop: '16px' }}>
+            {/* Pression */}
+            <Col span={8}>
+              <Card size="small" title="Pression">
+                <Statistic
+                  title="Pression atmosph."
+                  value={details.pressure.value}
+                  suffix="hPa"
+                  valueStyle={{ color: '#eb2f96' }}
+                />
+                <div style={{ marginTop: '10px' }}>
+                  <Progress 
+                    percent={details.pressure.score * 10} 
+                    size="small"
+                    strokeColor={details.pressure.score >= 7 ? '#52c41a' : details.pressure.score >= 4 ? '#faad14' : '#f5222d'}
+                  />
+                  <small>Impact sur le score</small>
+                </div>
+              </Card>
+            </Col>
+            
+            {/* Vagues - seulement si en eau salée */}
+            {spot.waterType === 'salt' && details.wave && (
+              <Col span={8}>
+                <Card size="small" title="Vagues">
+                  <Statistic
+                    title="Hauteur"
+                    value={marine.waveHeight}
+                    precision={1}
+                    suffix="m"
+                    valueStyle={{ color: '#1890ff' }}
+                  />
+                  {marine.wavePeriod && (
+                    <Statistic
+                      title="Période"
+                      value={marine.wavePeriod}
+                      precision={1}
+                      suffix="s"
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  )}
+                  <div style={{ marginTop: '10px' }}>
+                    <Progress 
+                      percent={details.wave.score * 10} 
+                      size="small"
+                      strokeColor={details.wave.score >= 7 ? '#52c41a' : details.wave.score >= 4 ? '#faad14' : '#f5222d'}
+                    />
+                    <small>Impact sur le score</small>
+                  </div>
+                </Card>
+              </Col>
+            )}
+            
+            {/* Marée - seulement si en eau salée */}
+            {spot.waterType === 'salt' && details.tide && (
+              <Col span={8}>
+                <Card size="small" title="Marée">
+                  <Statistic
+                    title="État actuel"
+                    value={details.tide.status}
+                    valueStyle={{ color: '#1890ff' }}
+                  />
+                  <div style={{ marginTop: '10px' }}>
+                    <small>Prochaine marée haute:</small>
+                    <div>{new Date(marine.tide.nextHighTide).toLocaleTimeString()}</div>
+                  </div>
+                  <div style={{ marginTop: '5px' }}>
+                    <small>Prochaine marée basse:</small>
+                    <div>{new Date(marine.tide.nextLowTide).toLocaleTimeString()}</div>
+                  </div>
+                  <div style={{ marginTop: '10px' }}>
+                    <Progress 
+                      percent={details.tide.score * 10} 
+                      size="small"
+                      strokeColor={details.tide.score >= 7 ? '#52c41a' : details.tide.score >= 4 ? '#faad14' : '#f5222d'}
+                    />
+                    <small>Impact sur le score</small>
+                  </div>
+                </Card>
+              </Col>
+            )}
+          </Row>
+          
+          <Divider orientation="left">Recommandations</Divider>
+          <Card>
+            <p style={{ fontSize: '16px' }}>{recommendation}</p>
+            
+            <div style={{ marginTop: '16px' }}>
+              <h4>Types de poissons présents dans ce spot:</h4>
+              <div>
+                {spot.fishTypes.map(fishType => (
+                  <Tag color="blue" key={fishType}>
+                    {FISH_TYPES_FR[fishType] || fishType}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{ marginTop: '16px' }}>
+              <h4>Dernière mise à jour:</h4>
+              <p>{new Date(forecastDetails.timestamp).toLocaleString()}</p>
+            </div>
+          </Card>
+        </Modal>
+      );
+    } catch (error) {
+      console.error('Erreur lors du rendu du modal de détails:', error);
+      setIsForecastModalVisible(false);
+      setForecastDetails(null);
+      message.error('Impossible d\'afficher les détails de la prévision');
+      return null;
+    }
+  };
+  
+  // Mise à jour de la fonction renderFishingScore pour permettre de cliquer sur le score
+  const renderFishingScore = (spot) => {
+    const forecast = spotForecasts[spot.id];
+    
+    if (!forecast) {
+      return null;
+    }
+    
+    if (forecast.error) {
+      return (
+        <div style={{ marginTop: '12px' }}>
+          <Tag icon={<CloudOutlined />} color="default">
+            Prévision indisponible
+          </Tag>
+        </div>
+      );
+    }
+    
+    const { score, recommendation } = forecast.evaluation;
+    const { colorCode } = forecast;
+    
+    let statusColor;
+    if (score >= 8) statusColor = 'success';
+    else if (score >= 6) statusColor = 'processing';
+    else if (score >= 4) statusColor = 'warning';
+    else statusColor = 'error';
+    
+    return (
+      <div style={{ marginTop: '16px' }}>
+        <h4 style={{ marginBottom: '8px' }}>Prévision de pêche</h4>
+        
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            marginBottom: '8px',
+            cursor: 'pointer',
+            padding: '8px',
+            borderRadius: '4px',
+            transition: 'background-color 0.3s',
+            ':hover': { backgroundColor: '#f5f5f5' }
+          }}
+          onClick={() => showForecastDetails(forecast, spot)}
+        >
+          <Tooltip title={`Score de pêche: ${score}/10 - Cliquez pour plus de détails`}>
+            <Progress
+              type="circle"
+              percent={score * 10}
+              width={60}
+              format={percent => Math.round(percent / 10)}
+              status={statusColor}
+              strokeColor={colorCode}
+              style={{ marginRight: '16px' }}
+            />
+          </Tooltip>
+          
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: '500', color: colorCode }}>
+              Score: {score}/10
+            </div>
+            <div style={{ fontSize: '12px', color: '#666', maxWidth: '200px' }}>
+              {recommendation}
+            </div>
+          </div>
+        </div>
+        
+        {forecast.marine && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {spot.waterType === 'salt' && forecast.marine.waveHeight && (
+              <Tag color="blue">Vagues: {forecast.marine.waveHeight.toFixed(1)}m</Tag>
+            )}
+            {forecast.marine.waterTemperature && (
+              <Tag color="cyan">Eau: {forecast.marine.waterTemperature.toFixed(1)}°C</Tag>
+            )}
+            {forecast.weather && forecast.weather.wind && (
+              <Tag color="purple">Vent: {forecast.weather.wind.speed} km/h</Tag>
+            )}
+            {spot.waterType === 'salt' && forecast.marine.tide && (
+              <Tag color="geekblue">Marée: {forecast.marine.tide.type} {forecast.marine.tide.direction}</Tag>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       <Card
         title="Mes Spots de Pêche"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-            setIsEditMode(false);
-            setCurrentSpot(null);
-            setImageUrl('');
-            setCustomLocation(null);
-            form.resetFields();
-            addressForm.resetFields();
-            setIsModalVisible(true);
-          }}>
-            Ajouter un spot
-          </Button>
+          <Space>
+            <Button 
+              icon={<CloudOutlined />} 
+              onClick={() => loadSpotForecasts(spots)} 
+              loading={forecastLoading}
+            >
+              Actualiser prévisions
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+              setIsEditMode(false);
+              setCurrentSpot(null);
+              setImageUrl('');
+              setCustomLocation(null);
+              form.resetFields();
+              addressForm.resetFields();
+              setIsModalVisible(true);
+            }}>
+              Ajouter un spot
+            </Button>
+          </Space>
         }
         style={{ borderRadius: '8px' }}
       >
@@ -384,6 +805,8 @@ const SpotsPage = () => {
                           </Tag>
                         ))}
                       </div>
+                      
+                      {renderFishingScore(item)}
                     </Card>
                   </List.Item>
                 )}
@@ -522,6 +945,9 @@ const SpotsPage = () => {
           </Tabs.TabPane>
         </Tabs>
       </Modal>
+      
+      {/* Ajout du modal pour les détails de la prévision */}
+      {renderForecastDetailsModal()}
     </div>
   );
 };

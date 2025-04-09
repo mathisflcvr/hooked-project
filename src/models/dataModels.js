@@ -168,11 +168,34 @@ export const createSpot = (data) => ({
   }, // Paris par défaut
   address: data.address || null,
   image: data.image || null,
-  waterType: data.waterType || WATER_TYPES.FRESH,
+  waterType: data.waterType || getDefaultWaterType(data.type), // Détermine automatiquement le type d'eau
   fishTypes: data.fishTypes || [],
   createdAt: data.createdAt || new Date().toISOString(),
   createdBy: data.createdBy
 });
+
+/**
+ * Détermine le type d'eau par défaut en fonction du type de spot
+ * @param {string} spotType - Type de spot (Lac, Rivière, Mer, etc.)
+ * @returns {string} Type d'eau (fresh, salt, brackish)
+ */
+const getDefaultWaterType = (spotType) => {
+  if (!spotType) return WATER_TYPES.FRESH;
+  
+  const saltWaterTypes = ['Mer', 'Océan', 'Port', 'Plage', 'Baie'];
+  const brackishWaterTypes = ['Estuaire', 'Delta'];
+  
+  if (saltWaterTypes.some(type => spotType.includes(type))) {
+    return WATER_TYPES.SALT;
+  }
+  
+  if (brackishWaterTypes.some(type => spotType.includes(type))) {
+    return WATER_TYPES.BRACKISH;
+  }
+  
+  // Par défaut, eau douce
+  return WATER_TYPES.FRESH;
+};
 
 // Modèle pour un poisson capturé
 export const createCaughtFish = (data) => ({
