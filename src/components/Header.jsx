@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Layout, Menu } from 'antd';
+import { Layout } from 'antd';
 import AuthButton from './AuthButton';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,14 +29,6 @@ const Header = () => {
             Hooked
           </h1>
         </Link>
-      </div>
-      
-      <div className="nav-links" style={{ flex: 1, textAlign: 'center' }}>
-        <Menu mode="horizontal" selectedKeys={[window.location.pathname]} style={{ border: 'none', justifyContent: 'center' }}>
-          <Menu.Item key="/map">
-            <Link to="/map">Carte</Link>
-          </Menu.Item>
-        </Menu>
       </div>
       
       <div className="right-content">

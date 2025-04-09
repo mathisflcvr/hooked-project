@@ -1,107 +1,235 @@
 import { useState, useEffect } from 'react';
-import { Card, Avatar, Button, Tabs, Form, Input, Upload, message, List, Space, Modal, Switch } from 'antd';
-import { UserOutlined, EditOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, CameraOutlined, LoadingOutlined, PlusOutlined } from '@ant-design/icons';
+import { Card, Avatar, Button, Tabs, Form, Input, message, List, Space, Modal, Switch, Row, Col } from 'antd';
+import { UserOutlined, EditOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, CameraOutlined, LoadingOutlined } from '@ant-design/icons';
 import { userService } from '../services/userService';
 import { imageService } from '../services/imageService';
 import { storageService } from '../services/storageService';
 import { FISH_TYPES, FISH_TYPES_FR } from '../models/dataModels';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const { TabPane } = Tabs;
 
+// Collection d'avatars de poissons prédéfinis
+const FISH_AVATARS = [
+  { id: 1, url: 'https://img.icons8.com/color/96/null/fish.png', name: 'Poisson coloré' },
+  { id: 2, url: 'https://img.icons8.com/color/96/null/clown-fish.png', name: 'Poisson clown' },
+  { id: 3, url: 'https://img.icons8.com/color/96/null/koi-fish.png', name: 'Poisson koi' },
+  { id: 4, url: 'https://img.icons8.com/color/96/null/fish-food.png', name: 'Poisson tropical' },
+  { id: 5, url: 'https://img.icons8.com/color/96/null/shark.png', name: 'Requin' },
+  { id: 6, url: 'https://img.icons8.com/color/96/null/bream.png', name: 'Dorade' },
+];
+
 const ProfilePage = () => {
+  const { user: authUser, getUserProfile, updateProfile } = useAuth();
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [favoriteSpots, setFavoriteSpots] = useState([]);
   const [userCatches, setUserCatches] = useState([]);
-  const [imageLoading, setImageLoading] = useState(false);
+  const [isAvatarModalVisible, setIsAvatarModalVisible] = useState(false);
   const [form] = Form.useForm();
 
   useEffect(() => {
     loadUserData();
-  }, []);
+  }, [authUser]);
 
-  const loadUserData = () => {
+  const loadUserData = async () => {
     try {
       setLoading(true);
       
-      // Charger les données de l'utilisateur
-      const currentUser = userService.getCurrentUser();
-      setUser(currentUser);
+      if (!authUser) {
+        // Si l'utilisateur n'est pas connecté, on charge les données de la démo
+        const demoUser = userService.getCurrentUser();
+        setUser(demoUser);
+        setUserProfile(demoUser);
+        
+        // Configurer le formulaire avec les données de démo
+        form.setFieldsValue({
+          username: demoUser.username,
+          email: demoUser.email,
+          bio: demoUser.bio || '',
+          notifications: demoUser.preferences?.notifications || false
+        });
+        
+        // Charger les spots favoris et captures
+        const favorites = userService.getUserFavorites();
+        setFavoriteSpots(favorites);
+        
+        const catches = userService.getUserCatches();
+        setUserCatches(catches);
+        
+        return;
+      }
+      
+      // Charger les données de l'utilisateur authentifié
+      setUser(authUser);
+      
+      // Récupérer le profil utilisateur depuis la base de données
+      try {
+        const profile = await getUserProfile(authUser.id);
+        setUserProfile(profile);
+      } catch (profileError) {
+        console.error('Erreur lors de la récupération du profil:', profileError);
+        // Créer un profil par défaut si non trouvé
+        setUserProfile({
+          username: authUser.user_metadata?.username || authUser.email,
+          bio: '',
+          notifications: false
+        });
+      }
+      
+      // Utiliser soit le profil récupéré, soit les données de l'utilisateur
+      const displayName = userProfile?.username || authUser.user_metadata?.username || authUser.email;
+      const userBio = userProfile?.bio || '';
+      const userNotifications = userProfile?.notifications || false;
       
       // Configurer le formulaire avec les données actuelles
       form.setFieldsValue({
-        username: currentUser.username,
-        email: currentUser.email,
-        bio: currentUser.bio,
-        notifications: currentUser.preferences?.notifications
+        username: displayName,
+        email: authUser.email,
+        bio: userBio,
+        notifications: userNotifications
       });
       
-      // Charger les spots favoris
+      // Charger les spots favoris et captures
       const favorites = userService.getUserFavorites();
       setFavoriteSpots(favorites);
       
-      // Charger les captures de l'utilisateur
       const catches = userService.getUserCatches();
       setUserCatches(catches);
+      
     } catch (error) {
       console.error('Erreur lors du chargement des données utilisateur:', error);
-      message.error('Impossible de charger les données utilisateur');
+      // Utiliser les données locales comme fallback
+      const localUser = userService.getCurrentUser();
+      setUser(localUser);
+      setUserProfile(localUser);
+      message.warning('Mode démo activé : certaines fonctionnalités peuvent être limitées');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleProfileUpdate = (values) => {
+  const handleProfileUpdate = async (values) => {
     try {
-      const updatedUser = userService.updateUserProfile({
-        username: values.username,
-        email: values.email,
-        bio: values.bio,
-        preferences: {
-          notifications: values.notifications
-        }
-      });
+      if (!authUser) {
+        // Mode démo : mettre à jour localement
+        const updatedUser = userService.updateUserProfile({
+          username: values.username,
+          email: values.email,
+          bio: values.bio,
+          preferences: {
+            notifications: values.notifications
+          }
+        });
+        
+        setUser(updatedUser);
+        setUserProfile(updatedUser);
+        setEditMode(false);
+        message.success('Profil mis à jour avec succès (mode démo)');
+        return;
+      }
       
-      setUser(updatedUser);
-      setEditMode(false);
-      message.success('Profil mis à jour avec succès');
+      // Mettre à jour le profil via AuthContext
+      try {
+        await updateProfile(authUser.id, {
+          username: values.username,
+          bio: values.bio,
+          notifications: values.notifications
+        });
+        
+        // Mettre à jour également dans userService pour la compatibilité
+        userService.updateUserProfile({
+          username: values.username,
+          email: values.email,
+          bio: values.bio,
+          preferences: {
+            notifications: values.notifications
+          }
+        });
+        
+        // Recharger les données
+        await loadUserData();
+        setEditMode(false);
+        message.success('Profil mis à jour avec succès');
+      } catch (error) {
+        console.error('Erreur lors de la mise à jour du profil:', error);
+        message.error('Erreur lors de la mise à jour du profil dans Supabase. Mise à jour locale uniquement.');
+        
+        // Fallback : mettre à jour localement
+        const updatedUser = userService.updateUserProfile({
+          username: values.username,
+          email: values.email,
+          bio: values.bio,
+          preferences: {
+            notifications: values.notifications
+          }
+        });
+        
+        setUser(updatedUser);
+        setUserProfile(updatedUser);
+        setEditMode(false);
+      }
     } catch (error) {
-      console.error('Erreur lors de la mise à jour du profil:', error);
+      console.error('Erreur globale lors de la mise à jour du profil:', error);
       message.error('Impossible de mettre à jour le profil');
     }
   };
 
-  const handleAvatarUpload = async (file) => {
+  const showAvatarModal = () => {
+    setIsAvatarModalVisible(true);
+  };
+
+  const handleAvatarModalCancel = () => {
+    setIsAvatarModalVisible(false);
+  };
+
+  const handleAvatarSelection = async (avatarUrl) => {
     try {
-      setImageLoading(true);
+      setLoading(true);
       
-      // Valider l'image
-      const validation = imageService.validateImage(file);
-      if (!validation.isValid) {
-        validation.errors.forEach(error => message.error(error));
-        return false;
+      // Mettre à jour dans Supabase en premier
+      if (authUser) {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              avatar_url: avatarUrl,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', authUser.id);
+
+          if (error) {
+            console.error('Erreur Supabase:', error);
+            throw error;
+          }
+        } catch (error) {
+          console.error('Erreur lors de la mise à jour du profil dans Supabase:', error);
+          message.error('Erreur lors de la sauvegarde de l\'avatar');
+          return;
+        }
       }
+
+      // Mettre à jour l'état local
+      const updatedProfile = {
+        ...userProfile,
+        avatar_url: avatarUrl
+      };
+      setUserProfile(updatedProfile);
       
-      // Convertir et enregistrer
-      const result = await imageService.uploadImage(file);
+      // Mettre à jour dans userService pour la persistance locale
+      userService.updateUserAvatar(avatarUrl);
       
-      if (result.success) {
-        // Mettre à jour l'avatar dans le profil utilisateur
-        const updatedUser = userService.updateUserAvatar(result.url);
-        setUser(updatedUser);
-        message.success('Avatar mis à jour avec succès');
-      } else {
-        message.error(result.error || 'Erreur lors du téléchargement de l\'avatar');
-      }
+      setIsAvatarModalVisible(false);
+      message.success('Avatar mis à jour avec succès');
       
-      return false; // Empêcher le comportement par défaut d'antd Upload
     } catch (error) {
-      console.error('Erreur lors du téléchargement de l\'avatar:', error);
-      message.error('Erreur lors du téléchargement de l\'avatar');
-      return false;
+      console.error('Erreur lors de la mise à jour de l\'avatar:', error);
+      message.error('Erreur lors de la mise à jour de l\'avatar');
     } finally {
-      setImageLoading(false);
+      setLoading(false);
     }
   };
 
@@ -134,16 +262,16 @@ const ProfilePage = () => {
     return FISH_TYPES_FR[fishType] || fishType;
   };
 
-  const uploadButton = (
-    <div>
-      {imageLoading ? <LoadingOutlined /> : <PlusOutlined />}
-      <div style={{ marginTop: 8 }}>Télécharger</div>
-    </div>
-  );
-
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '50px' }}><LoadingOutlined style={{ fontSize: 24 }} spin /></div>;
   }
+
+  // On utilise les données du profil si disponibles, sinon les données de base de l'utilisateur
+  const displayName = userProfile?.username || user?.user_metadata?.username || user?.email || user?.username;
+  const userEmail = user?.email;
+  const userBio = userProfile?.bio || user?.bio || 'Aucune bio';
+  const userAvatar = userProfile?.avatar_url || user?.avatar || null;
+  const userNotifications = userProfile?.notifications || user?.preferences?.notifications || false;
 
   return (
     <div className="profile-page">
@@ -156,34 +284,27 @@ const ProfilePage = () => {
             <Avatar 
               size={100} 
               icon={<UserOutlined />} 
-              src={user?.avatar} 
+              src={userAvatar} 
               style={{ backgroundColor: '#1890ff' }}
             />
-            <Upload
-              name="avatar"
-              listType="picture-card"
-              className="avatar-uploader"
-              showUploadList={false}
-              beforeUpload={handleAvatarUpload}
-            >
-              <Button 
-                type="primary" 
-                shape="circle" 
-                icon={<CameraOutlined />} 
-                size="small"
-                style={{ 
-                  position: 'absolute', 
-                  bottom: 0, 
-                  right: 0,
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)' 
-                }}
-              />
-            </Upload>
+            <Button 
+              type="primary" 
+              shape="circle" 
+              icon={<CameraOutlined />} 
+              size="small"
+              onClick={showAvatarModal}
+              style={{ 
+                position: 'absolute', 
+                bottom: 0, 
+                right: 0,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)' 
+              }}
+            />
           </div>
           
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0 }}>{user?.username}</h2>
+              <h2 style={{ margin: 0 }}>{displayName}</h2>
               <Button 
                 type="primary" 
                 icon={<EditOutlined />} 
@@ -192,11 +313,73 @@ const ProfilePage = () => {
                 {editMode ? 'Annuler' : 'Modifier le profil'}
               </Button>
             </div>
-            <p style={{ color: '#666', margin: '8px 0' }}>{user?.email}</p>
-            <p>{user?.bio || 'Aucune bio'}</p>
+            <p style={{ color: '#666', margin: '8px 0' }}>{userEmail}</p>
+            <p>{userBio}</p>
           </div>
         </div>
       </Card>
+
+      {/* Modal de sélection d'avatar */}
+      <Modal
+        title="Choisissez votre avatar poisson"
+        open={isAvatarModalVisible}
+        onCancel={handleAvatarModalCancel}
+        footer={null}
+        width={800}
+      >
+        <p style={{ marginBottom: '20px' }}>Sélectionnez un des dessins de poissons pour votre profil :</p>
+        <Row gutter={[16, 16]}>
+          {FISH_AVATARS.map(avatar => (
+            <Col key={avatar.id} span={8}>
+              <div 
+                style={{ 
+                  textAlign: 'center', 
+                  padding: '16px',
+                  cursor: 'pointer',
+                  border: userProfile?.avatar_url === avatar.url ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                  borderRadius: '8px',
+                  transition: 'all 0.3s',
+                  backgroundColor: 'white',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onClick={() => handleAvatarSelection(avatar.url)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#1890ff';
+                  e.currentTarget.style.boxShadow = '0 0 8px rgba(24,144,255,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  if (userProfile?.avatar_url !== avatar.url) {
+                    e.currentTarget.style.borderColor = '#d9d9d9';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                <img 
+                  src={avatar.url} 
+                  alt={avatar.name}
+                  style={{ 
+                    width: '96px', 
+                    height: '96px',
+                    objectFit: 'contain'
+                  }} 
+                />
+                <p style={{ 
+                  marginTop: '12px', 
+                  fontSize: '14px',
+                  color: '#333',
+                  fontWeight: userProfile?.avatar_url === avatar.url ? '500' : 'normal'
+                }}>
+                  {avatar.name}
+                </p>
+              </div>
+            </Col>
+          ))}
+        </Row>
+      </Modal>
 
       <Tabs defaultActiveKey="1">
         <TabPane tab="Profil" key="1">
@@ -207,10 +390,10 @@ const ProfilePage = () => {
                 layout="vertical"
                 onFinish={handleProfileUpdate}
                 initialValues={{
-                  username: user?.username,
-                  email: user?.email,
-                  bio: user?.bio,
-                  notifications: user?.preferences?.notifications
+                  username: displayName,
+                  email: userEmail,
+                  bio: userBio,
+                  notifications: userNotifications
                 }}
               >
                 <Form.Item
@@ -229,7 +412,7 @@ const ProfilePage = () => {
                     { type: 'email', message: 'Format d\'email invalide' }
                   ]}
                 >
-                  <Input />
+                  <Input disabled />
                 </Form.Item>
                 
                 <Form.Item
@@ -265,11 +448,11 @@ const ProfilePage = () => {
               </div>
               
               <h3>À propos</h3>
-              <p>{user?.bio || 'Aucune bio'}</p>
+              <p>{userBio}</p>
               
               <h3>Préférences</h3>
               <p>
-                <strong>Notifications:</strong> {user?.preferences?.notifications ? 'Activées' : 'Désactivées'}
+                <strong>Notifications:</strong> {userNotifications ? 'Activées' : 'Désactivées'}
               </p>
               <p>
                 <strong>Thème:</strong> {user?.preferences?.theme === 'dark' ? 'Sombre' : 'Clair'}
