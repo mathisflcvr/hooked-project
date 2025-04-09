@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, List, Button, Modal, Form, Input, Select, message, Empty, Tag, Upload, Popconfirm, Space, Tabs, Progress, Tooltip, Row, Col, Divider, Statistic } from 'antd';
-import { PlusOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, EditOutlined, DeleteOutlined, LoadingOutlined, SearchOutlined, CloudOutlined } from '@ant-design/icons';
+import { PlusOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, EditOutlined, DeleteOutlined, LoadingOutlined, SearchOutlined, CloudOutlined, SyncOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { userService } from '../services/userService';
 import { imageService } from '../services/imageService';
@@ -319,58 +319,43 @@ const SpotsPage = () => {
   }, {});
 
   // Nouvelle fonction pour charger les prévisions météo
-  const loadSpotForecasts = async (spotsToForecast) => {
+  const loadSpotForecasts = async (spotsToForecast, forceRefresh = false) => {
     try {
       setForecastLoading(true);
       
-      // Vérifier si des spots sont disponibles
-      if (!spotsToForecast || spotsToForecast.length === 0) {
-        console.log('Aucun spot à analyser pour les prévisions météo');
-        return;
-      }
-
-      console.log(`Chargement des prévisions pour ${spotsToForecast.length} spots...`);
+      // Utiliser la nouvelle méthode qui gère le cache
+      const forecasts = await weatherService.getForecastsForSpots(spotsToForecast, forceRefresh);
       
-      // Récupérer les prévisions pour chaque spot (10 à la fois max pour éviter de surcharger l'API)
-      const forecasts = {};
-      const maxConcurrentRequests = 5;
-      
-      for (let i = 0; i < spotsToForecast.length; i += maxConcurrentRequests) {
-        const batch = spotsToForecast.slice(i, i + maxConcurrentRequests);
-        console.log(`Traitement du lot ${i / maxConcurrentRequests + 1}, ${batch.length} spots`);
-        
-        try {
-          const results = await Promise.all(
-            batch.map(spot => {
-              console.log(`Récupération prévision pour spot: ${spot.name}`);
-              return weatherService.getFishingForecast(spot)
-                .catch(error => {
-                  console.error(`Erreur pour le spot ${spot.name}:`, error);
-                  return { 
-                    spot: spot.id, 
-                    error: true,
-                    evaluation: { score: 0, recommendation: 'Erreur de chargement' }
-                  };
-                });
-            })
-          );
-          
-          results.forEach(result => {
-            if (result && result.spot) {
-              forecasts[result.spot] = result;
-            }
-          });
-        } catch (batchError) {
-          console.error('Erreur lors du traitement d\'un lot de spots:', batchError);
-        }
-      }
-      
-      console.log('Prévisions chargées:', Object.keys(forecasts).length);
       setSpotForecasts(forecasts);
-      message.success(`Prévisions chargées pour ${Object.keys(forecasts).length} spots`);
+      if (Object.keys(forecasts).length > 0) {
+        message.success(`Prévisions météo chargées pour ${Object.keys(forecasts).length} spots`);
+      } else {
+        message.info("Aucune prévision météo disponible");
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des prévisions météo:', error);
       message.error('Impossible de charger les prévisions météo');
+    } finally {
+      setForecastLoading(false);
+    }
+  };
+  
+  // Fonction pour rafraîchir une prévision spécifique
+  const refreshSingleForecast = async (spot) => {
+    try {
+      setForecastLoading(true);
+      
+      const forecast = await weatherService.getFishingForecast(spot, true);
+      
+      setSpotForecasts(prev => ({
+        ...prev,
+        [spot.id]: forecast
+      }));
+      
+      message.success(`Prévision actualisée pour ${spot.name}`);
+    } catch (error) {
+      console.error(`Erreur lors de l'actualisation de la prévision pour ${spot.name}:`, error);
+      message.error(`Erreur lors de l'actualisation de la prévision`);
     } finally {
       setForecastLoading(false);
     }
@@ -641,7 +626,18 @@ const SpotsPage = () => {
     const forecast = spotForecasts[spot.id];
     
     if (!forecast) {
-      return null;
+      return (
+        <div style={{ marginTop: '12px' }}>
+          <Button 
+            icon={<CloudOutlined />} 
+            size="small"
+            onClick={() => refreshSingleForecast(spot)}
+            loading={forecastLoading}
+          >
+            Charger prévision
+          </Button>
+        </div>
+      );
     }
     
     if (forecast.error) {
@@ -650,6 +646,15 @@ const SpotsPage = () => {
           <Tag icon={<CloudOutlined />} color="default">
             Prévision indisponible
           </Tag>
+          <Button 
+            icon={<SyncOutlined />} 
+            size="small" 
+            onClick={() => refreshSingleForecast(spot)}
+            style={{ marginLeft: '8px' }}
+            loading={forecastLoading}
+          >
+            Réessayer
+          </Button>
         </div>
       );
     }
@@ -665,7 +670,16 @@ const SpotsPage = () => {
     
     return (
       <div style={{ marginTop: '16px' }}>
-        <h4 style={{ marginBottom: '8px' }}>Prévision de pêche</h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <h4 style={{ margin: 0 }}>Prévision de pêche</h4>
+          <Button 
+            icon={<SyncOutlined />} 
+            size="small" 
+            onClick={() => refreshSingleForecast(spot)}
+            loading={forecastLoading}
+            title="Rafraîchir la prévision"
+          />
+        </div>
         
         <div 
           style={{ 
@@ -699,6 +713,9 @@ const SpotsPage = () => {
             <div style={{ fontSize: '12px', color: '#666', maxWidth: '200px' }}>
               {recommendation}
             </div>
+            <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
+              Mise à jour: {new Date(forecast.timestamp).toLocaleTimeString()}
+            </div>
           </div>
         </div>
         
@@ -730,7 +747,7 @@ const SpotsPage = () => {
           <Space>
             <Button 
               icon={<CloudOutlined />} 
-              onClick={() => loadSpotForecasts(spots)} 
+              onClick={() => loadSpotForecasts(spots, true)} 
               loading={forecastLoading}
             >
               Actualiser prévisions

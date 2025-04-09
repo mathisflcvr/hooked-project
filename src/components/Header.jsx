@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Layout } from 'antd';
 import AuthButton from './AuthButton';
 import { useAuth } from '../context/AuthContext';
+import Logo from './Logo';
 
 const { Header: AntHeader } = Layout;
 
@@ -23,11 +24,12 @@ const Header = () => {
       backgroundColor: '#fff',
       boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
     }}>
-      <div className="logo" style={{ height: '32px', margin: '16px 0' }}>
-        <Link to="/map">
-          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#1890ff' }}>
+      <div className="logo" style={{ height: '38px', margin: '16px 0', display: 'flex', alignItems: 'center' }}>
+        <Link to="/map" style={{ display: 'flex', alignItems: 'center' }}>
+          <Logo height={38} />
+          <span style={{ marginLeft: '10px', fontSize: '20px', fontWeight: 'bold', color: '#4285F4' }}>
             Hooked
-          </h1>
+          </span>
         </Link>
       </div>
       

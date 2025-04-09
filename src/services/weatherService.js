@@ -7,6 +7,13 @@ const API_KEY = 'b0de98e9dae92edbbd894af0ed57a9cf';
 const STORMGLASS_API_KEY = '86da0a3c-0f05-11ef-a6c1-0242ac130002-86da0b18-0f05-11ef-a6c1-0242ac130002';
 const STORMGLASS_ENDPOINT = 'https://api.stormglass.io/v2';
 
+// Cache pour les prévisions météo par spot
+// Structure : { spotId: { timestamp, data } }
+const forecastCache = {};
+
+// Durée de validité du cache en millisecondes (3 heures)
+const CACHE_DURATION = 3 * 60 * 60 * 1000;
+
 export const weatherService = {
   /**
    * Récupère la météo actuelle pour une localisation
@@ -122,6 +129,97 @@ export const weatherService = {
   },
   
   /**
+   * Simule des données météo pour le développement
+   * @private
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @returns {Object} Données météo simulées
+   */
+  _simulateWeatherData(lat, lng) {
+    // Au lieu d'utiliser Math.random() qui change à chaque appel,
+    // nous utilisons une fonction déterministe basée uniquement sur les coordonnées
+    // Cela garantit que les mêmes coordonnées produisent toujours les mêmes données
+    
+    // Fonction de hachage simple pour obtenir une valeur déterministe basée sur lat et lng
+    const hashCoordinates = (lat, lng) => {
+      // Convertir en entiers pour une manipulation plus facile
+      const latFixed = Math.round(lat * 1000);
+      const lngFixed = Math.round(lng * 1000);
+      // Créer une valeur de hachage simple mais déterministe
+      return (latFixed * 31 + lngFixed * 17) % 10000 / 10000;
+    };
+    
+    // Obtenir une valeur de référence déterministe pour ce spot
+    const hashValue = hashCoordinates(lat, lng);
+    
+    // Fonction pour générer une valeur déterministe dans une plage
+    const deterministicValue = (min, max, offset = 0) => {
+      // Utiliser hashValue avec un offset pour différentes valeurs du même spot
+      const value = (hashValue + offset) % 1;
+      return min + value * (max - min);
+    };
+    
+    // Générer des conditions météo déterministes basées sur les coordonnées
+    const temp = deterministicValue(10, 25);
+    const pressure = deterministicValue(990, 1030, 0.1);
+    const windSpeed = deterministicValue(0, 30, 0.2);
+    const windDeg = deterministicValue(0, 360, 0.3) | 0; // Convertir en entier
+    const cloudCover = deterministicValue(0, 100, 0.4);
+    const humidity = deterministicValue(30, 90, 0.5);
+    
+    // Pour garantir que les conditions météo sont réalistes pour la région,
+    // modifier légèrement en fonction de la latitude (climats)
+    let tempAdjustment = 0;
+    // Plus près de l'équateur = plus chaud
+    if (Math.abs(lat) < 23) {
+      tempAdjustment = 5; // Tropiques
+    } 
+    // Zones tempérées
+    else if (Math.abs(lat) < 45) {
+      tempAdjustment = 0; // Normal
+    } 
+    // Zones froides
+    else {
+      tempAdjustment = -5; // Plus froid
+    }
+    
+    // Types de météo avec probabilités différentes selon la région
+    const weatherTypes = [
+      { id: 800, description: 'Ciel dégagé' },
+      { id: 801, description: 'Quelques nuages' },
+      { id: 802, description: 'Nuages épars' },
+      { id: 803, description: 'Nuages fragmentés' },
+      { id: 500, description: 'Pluie légère' }
+    ];
+    
+    // Sélectionner un type de météo de manière déterministe
+    const weatherIndex = Math.floor(deterministicValue(0, weatherTypes.length, 0.6));
+    
+    // Calcul pour savoir s'il pleut
+    const isRaining = weatherTypes[weatherIndex].id >= 500 && weatherTypes[weatherIndex].id < 600;
+    
+    // Si c'est un jour de pluie, calculer l'intensité de manière déterministe
+    const rainAmount = isRaining ? deterministicValue(0.1, 5, 0.7) : 0;
+    
+    return {
+      main: {
+        temp: temp + tempAdjustment,
+        pressure,
+        humidity
+      },
+      wind: {
+        speed: windSpeed,
+        deg: windDeg
+      },
+      clouds: {
+        all: cloudCover
+      },
+      weather: [weatherTypes[weatherIndex]],
+      rain: isRaining ? { '1h': rainAmount } : {}
+    };
+  },
+
+  /**
    * Simule des données marines pour le développement
    * @private
    * @param {number} lat - Latitude
@@ -129,23 +227,50 @@ export const weatherService = {
    * @returns {Object} Données marines simulées
    */
   _simulateMarineData(lat, lng) {
-    // Génère des valeurs pseudo-aléatoires basées sur la latitude et la longitude
-    const seed = Math.abs(Math.sin(lat * lng) * 10000);
-    const randomVal = (min, max) => min + ((seed * Math.random()) % (max - min));
+    // Fonction de hachage pour obtenir des valeurs déterministes
+    const hashCoordinates = (lat, lng) => {
+      const latFixed = Math.round(lat * 1000);
+      const lngFixed = Math.round(lng * 1000);
+      return (latFixed * 31 + lngFixed * 17) % 10000 / 10000;
+    };
     
-    // Simuler des données différentes mais cohérentes pour différents lieux
-    const waveHeight = randomVal(0.2, 2.5); // en mètres
-    const waterTemp = randomVal(12, 25); // en °C
-    const windSpeed = randomVal(3, 30); // en km/h
-    const wavePeriod = randomVal(3, 14); // en secondes
+    const hashValue = hashCoordinates(lat, lng);
     
-    // Détermine si le spot est près de la côte ou non (pour les marées)
-    const isCoastal = Math.abs(lng) < 10 || Math.abs(lat) < 10; // Simplification
+    // Fonction pour générer une valeur déterministe dans une plage
+    const deterministicValue = (min, max, offset = 0) => {
+      const value = (hashValue + offset) % 1;
+      return min + value * (max - min);
+    };
     
-    // Simuler le cycle des marées si le spot est côtier
+    // Générer des données marines déterministes
+    const waveHeight = deterministicValue(0.2, 2.5, 0.1);
+    const waterTemp = deterministicValue(12, 25, 0.2);
+    const wavePeriod = deterministicValue(3, 14, 0.3);
+    const windSpeed = deterministicValue(3, 30, 0.4);
+    const windDirection = Math.floor(deterministicValue(0, 360, 0.5));
+    const currentSpeed = deterministicValue(0, 5, 0.6);
+    const currentDirection = Math.floor(deterministicValue(0, 360, 0.7));
+    
+    // La hauteur des vagues est liée à la distance de la côte
+    // Estimation simplifiée: plus on est loin de méridiens/parallèles majeurs (côtes), plus les vagues sont hautes
+    const coastalFactor = Math.min(
+      Math.abs(Math.round(lat) - lat), 
+      Math.abs(Math.round(lng) - lng)
+    ) * 10;
+    
+    const adjustedWaveHeight = waveHeight * (1 + coastalFactor);
+    
+    // Détermine si le spot est près de la côte de manière déterministe
+    // Plus précis que la vérification précédente
+    const isCoastal = coastalFactor < 0.3;
+    
+    // Simuler le cycle des marées de manière déterministe
+    // Utiliser la date actuelle uniquement pour l'heure, mais le reste basé sur les coordonnées
     const currentHour = new Date().getHours();
+    const baseHour = (Math.floor(hashValue * 12) + currentHour) % 12;
+    
     const tideHeight = isCoastal 
-      ? Math.sin((currentHour / 12) * Math.PI) * 2 + 2 
+      ? Math.sin((baseHour / 12) * Math.PI) * 2 + 2 
       : null;
     
     const tideType = tideHeight 
@@ -153,25 +278,34 @@ export const weatherService = {
       : null;
     
     const tideDirection = tideHeight 
-      ? (Math.sin((currentHour / 6) * Math.PI) > 0 ? 'montante' : 'descendante')
+      ? (Math.sin((baseHour / 6) * Math.PI) > 0 ? 'montante' : 'descendante')
       : null;
     
+    // Calculer les prochaines marées de manière déterministe mais réaliste
+    const timeToNextHighTide = isCoastal 
+      ? ((12 - (baseHour % 12)) % 12) || 12 // Éviter 0 heure
+      : 6;
+      
+    const timeToNextLowTide = isCoastal
+      ? ((6 - (baseHour % 6)) % 6) || 6 // Éviter 0 heure
+      : 12;
+    
     return {
-      waveHeight,
-      waveDirection: Math.floor(randomVal(0, 360)),
+      waveHeight: adjustedWaveHeight,
+      waveDirection: windDirection, // Les vagues suivent généralement le vent
       wavePeriod,
       windSpeed,
-      windDirection: Math.floor(randomVal(0, 360)),
+      windDirection,
       waterTemperature: waterTemp,
       tide: isCoastal ? {
         height: tideHeight,
         type: tideType,
         direction: tideDirection,
-        nextHighTide: new Date(Date.now() + (6 - (currentHour % 6)) * 3600 * 1000),
-        nextLowTide: new Date(Date.now() + (12 - (currentHour % 12)) * 3600 * 1000)
+        nextHighTide: new Date(Date.now() + timeToNextHighTide * 3600 * 1000),
+        nextLowTide: new Date(Date.now() + timeToNextLowTide * 3600 * 1000)
       } : null,
-      currentSpeed: randomVal(0, 5), // en nœuds
-      currentDirection: Math.floor(randomVal(0, 360))
+      currentSpeed,
+      currentDirection
     };
   },
 
@@ -423,16 +557,28 @@ export const weatherService = {
    * Méthode complète pour récupérer la prévision de pêche pour un spot
    * Combine toutes les données nécessaires et génère un score
    * @param {Object} spot - Le spot de pêche
+   * @param {boolean} forceRefresh - Forcer le rafraîchissement du cache
    * @returns {Promise<Object>} Prévision complète avec scoring
    */
-  async getFishingForecast(spot) {
+  async getFishingForecast(spot, forceRefresh = false) {
     try {
       if (!spot || !spot.location) {
         console.log('Spot invalide:', spot);
         throw new Error('Spot invalide ou sans localisation');
       }
       
-      console.log('Récupération des données pour le spot:', spot.name);
+      const spotId = spot.id;
+      const now = Date.now();
+      
+      // Vérifier si les données sont en cache et toujours valides
+      if (!forceRefresh && 
+          forecastCache[spotId] && 
+          now - forecastCache[spotId].timestamp < CACHE_DURATION) {
+        console.log(`Utilisation des données en cache pour le spot: ${spot.name}`);
+        return forecastCache[spotId].data;
+      }
+      
+      console.log(`Récupération des données pour le spot: ${spot.name}`);
       
       // Simuler des données de météo et marines pour éviter les appels API en développement
       // Décommenter le code ci-dessous pour utiliser de vraies données
@@ -459,7 +605,7 @@ export const weatherService = {
         waterType
       );
       
-      return {
+      const forecastData = {
         spot: spot.id,
         timestamp: new Date().toISOString(),
         weather: weatherData,
@@ -468,8 +614,22 @@ export const weatherService = {
         // Ajouter une couleur basée sur le score pour l'UI
         colorCode: this._getScoreColorCode(evaluation.score)
       };
+      
+      // Mettre en cache les données
+      forecastCache[spotId] = {
+        timestamp: now,
+        data: forecastData
+      };
+      
+      return forecastData;
     } catch (error) {
       console.error(`Erreur lors de la récupération de la prévision pour le spot ${spot?.name || 'inconnu'}:`, error);
+      
+      // Essayer d'utiliser des données en cache même si elles sont expirées
+      if (forecastCache[spot?.id]) {
+        console.log(`Utilisation des données en cache expirées pour le spot: ${spot.name}`);
+        return forecastCache[spot.id].data;
+      }
       
       // Retourner un objet valide avec un score par défaut
       return {
@@ -489,54 +649,70 @@ export const weatherService = {
   },
   
   /**
-   * Simule des données météo pour le développement
-   * @private
-   * @param {number} lat - Latitude
-   * @param {number} lng - Longitude
-   * @returns {Object} Données météo simulées
+   * Vide le cache des prévisions pour tous les spots ou un spot spécifique
+   * @param {string} spotId - ID du spot à supprimer du cache (optionnel)
    */
-  _simulateWeatherData(lat, lng) {
-    // Génère des valeurs pseudo-aléatoires basées sur la latitude et la longitude
-    const seed = Math.abs(Math.sin(lat * lng) * 10000);
-    const randomVal = (min, max) => min + ((seed * Math.random()) % (max - min));
-    
-    const temp = randomVal(10, 25); // Température entre 10 et 25°C
-    const pressure = randomVal(990, 1030); // Pression entre 990 et 1030 hPa
-    const windSpeed = randomVal(0, 30); // Vitesse du vent entre 0 et 30 km/h
-    const windDeg = randomVal(0, 360); // Direction du vent
-    const cloudCover = randomVal(0, 100); // Couverture nuageuse entre 0 et 100%
-    
-    // Choisir un type de météo (ciel dégagé, nuageux, pluie, etc.)
-    const weatherTypes = [
-      { id: 800, description: 'Ciel dégagé' },
-      { id: 801, description: 'Quelques nuages' },
-      { id: 802, description: 'Nuages épars' },
-      { id: 803, description: 'Nuages fragmentés' },
-      { id: 500, description: 'Pluie légère' }
-    ];
-    
-    const weatherIndex = Math.floor(randomVal(0, weatherTypes.length));
-    
-    return {
-      main: {
-        temp,
-        pressure,
-        humidity: randomVal(30, 90)
-      },
-      wind: {
-        speed: windSpeed,
-        deg: windDeg
-      },
-      clouds: {
-        all: cloudCover
-      },
-      weather: [weatherTypes[weatherIndex]],
-      rain: weatherTypes[weatherIndex].id >= 500 && weatherTypes[weatherIndex].id < 600 
-        ? { '1h': randomVal(0.1, 5) } 
-        : {}
-    };
+  clearForecastCache(spotId = null) {
+    if (spotId) {
+      delete forecastCache[spotId];
+      console.log(`Cache supprimé pour le spot: ${spotId}`);
+    } else {
+      Object.keys(forecastCache).forEach(key => delete forecastCache[key]);
+      console.log('Cache de prévisions entièrement vidé');
+    }
   },
-
+  
+  /**
+   * Récupère les prévisions pour tous les spots d'un coup
+   * @param {Array} spots - Liste des spots
+   * @param {boolean} forceRefresh - Forcer le rafraîchissement des données
+   * @param {number} maxConcurrent - Nombre maximal de requêtes simultanées
+   * @returns {Promise<Object>} Dictionnaire des prévisions par spotId
+   */
+  async getForecastsForSpots(spots, forceRefresh = false, maxConcurrent = 5) {
+    if (!spots || spots.length === 0) {
+      console.log('Aucun spot à analyser pour les prévisions météo');
+      return {};
+    }
+    
+    console.log(`Chargement des prévisions pour ${spots.length} spots...`);
+    
+    const forecasts = {};
+    
+    try {
+      // Traiter les spots par lots pour limiter les requêtes simultanées
+      for (let i = 0; i < spots.length; i += maxConcurrent) {
+        const batch = spots.slice(i, i + maxConcurrent);
+        console.log(`Traitement du lot ${Math.floor(i / maxConcurrent) + 1}, ${batch.length} spots`);
+        
+        const results = await Promise.all(
+          batch.map(spot => 
+            this.getFishingForecast(spot, forceRefresh)
+              .catch(error => {
+                console.error(`Erreur pour le spot ${spot.name}:`, error);
+                return { 
+                  spot: spot.id, 
+                  error: true,
+                  evaluation: { score: 0, recommendation: 'Erreur de chargement' }
+                };
+              })
+          )
+        );
+        
+        results.forEach(result => {
+          if (result && result.spot) {
+            forecasts[result.spot] = result;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des prévisions par lots:', error);
+    }
+    
+    console.log(`Prévisions chargées pour ${Object.keys(forecasts).length} spots`);
+    return forecasts;
+  },
+  
   /**
    * Obtient un code couleur basé sur le score de pêche
    * @private
