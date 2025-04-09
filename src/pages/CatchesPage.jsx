@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Card, List, Button, Modal, Form, Input, Select, Upload, message, Empty, Tabs, Radio, Space, Popconfirm, DatePicker } from 'antd';
-import { UploadOutlined, CameraOutlined, PlusOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Card, List, Button, Modal, Form, Input, Select, Upload, message, Empty, Tabs, Radio, Space, Popconfirm, DatePicker, Divider } from 'antd';
+import { UploadOutlined, CameraOutlined, PlusOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined, EditOutlined, DeleteOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { imageService } from '../services/imageService';
 import { geocodingService } from '../services/geocodingService';
-import { createCatch } from '../models/dataModels';
+import { createCatch, createCaughtFish } from '../models/dataModels';
 import { 
   FISH_TYPES, 
   FISH_TYPES_FR, 
@@ -82,15 +82,13 @@ const CatchesPage = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentCatch, setCurrentCatch] = useState(null);
   const [form] = Form.useForm();
-  const [addressForm] = Form.useForm();
+  const [fishForm] = Form.useForm();
   const [waterType, setWaterType] = useState(WATER_TYPES.FRESH);
   const [showCustomFishInput, setShowCustomFishInput] = useState(false);
-  const [customLocation, setCustomLocation] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
-  const [searchAddress, setSearchAddress] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [addressError, setAddressError] = useState('');
+  const [fishList, setFishList] = useState([]);
+  const [activeTabKey, setActiveTabKey] = useState('1');
 
   useEffect(() => {
     loadCatches();
@@ -104,7 +102,7 @@ const CatchesPage = () => {
   const handleWaterTypeChange = (e) => {
     setWaterType(e.target.value);
     // Réinitialiser le type de poisson sélectionné
-    form.setFieldsValue({ fishType: undefined });
+    fishForm.setFieldsValue({ fishType: undefined });
     setShowCustomFishInput(false);
   };
 
@@ -125,65 +123,22 @@ const CatchesPage = () => {
     }
   };
 
-  const handleAddressSearch = async () => {
-    try {
-      setIsSearching(true);
-      setAddressError('');
-      
-      const address = addressForm.getFieldValue('address');
-      if (!address || address.trim() === '') {
-        setAddressError('Veuillez entrer une adresse');
-        setIsSearching(false);
-        return;
-      }
-      
-      const result = await geocodingService.geocodeAddress(address);
-      
-      if (result) {
-        setCustomLocation({ lat: result.lat, lng: result.lng });
-        message.success('Adresse trouvée !');
-      } else {
-        setAddressError('Adresse non trouvée');
-      }
-    } catch (error) {
-      console.error('Erreur lors de la recherche d\'adresse:', error);
-      setAddressError('Erreur lors de la recherche');
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
   const handleEditCatch = (catchItem) => {
     setCurrentCatch(catchItem);
     setIsEditMode(true);
     setImageUrl(catchItem.photo || '');
     setWaterType(catchItem.waterType || WATER_TYPES.FRESH);
-    setCustomLocation(catchItem.location);
-    
-    if (catchItem.fishType === 'custom') {
-      setShowCustomFishInput(true);
-    }
+    setFishList(catchItem.fishes || []);
     
     // Remplir le formulaire avec les données existantes
     form.setFieldsValue({
       spotId: catchItem.spotId,
-      fishType: catchItem.fishType,
-      customFishType: catchItem.customFishType,
       bait: catchItem.bait,
       technique: catchItem.technique,
       weather: catchItem.weather,
-      weight: catchItem.weight,
-      length: catchItem.length,
       notes: catchItem.notes,
       catchDate: catchItem.catchDate ? moment(catchItem.catchDate) : undefined
     });
-    
-    // Remplir l'adresse si disponible
-    if (catchItem.address) {
-      addressForm.setFieldsValue({
-        address: catchItem.address
-      });
-    }
     
     setIsModalVisible(true);
   };
@@ -200,6 +155,39 @@ const CatchesPage = () => {
     }
   };
 
+  const handleAddFish = () => {
+    try {
+      fishForm.validateFields().then((values) => {
+        // Préparer les données du poisson
+        let fishData = {
+          fishType: values.fishType,
+          customFishType: values.customFishType,
+          name: values.fishName,
+          weight: values.weight,
+          length: values.length
+        };
+        
+        const newFish = createCaughtFish(fishData);
+        setFishList([...fishList, newFish]);
+        fishForm.resetFields();
+        setShowCustomFishInput(false);
+        message.success('Poisson ajouté à la capture');
+        
+        // Passer à l'onglet des informations après avoir ajouté un poisson
+        setActiveTabKey('1');
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout du poisson:', error);
+      message.error('Une erreur est survenue lors de l\'ajout du poisson');
+    }
+  };
+
+  const handleRemoveFish = (fishId) => {
+    const updatedFishList = fishList.filter(fish => fish.id !== fishId);
+    setFishList(updatedFishList);
+    message.success('Poisson retiré de la capture');
+  };
+
   const handleAddCatch = () => {
     try {
       // Vérifier si un spot de pêche est sélectionné
@@ -209,9 +197,9 @@ const CatchesPage = () => {
         return;
       }
       
-      // Vérifier si un type de poisson est sélectionné
-      if (!formValues.fishType) {
-        message.error('Veuillez sélectionner un type de poisson');
+      // Vérifier si au moins un poisson a été ajouté
+      if (fishList.length === 0) {
+        message.error('Veuillez ajouter au moins un poisson à votre capture');
         return;
       }
       
@@ -231,28 +219,6 @@ const CatchesPage = () => {
         return;
       }
       
-      // Si c'est un poisson custom, vérifier que le nom est indiqué
-      if (formValues.fishType === 'custom' && !formValues.customFishType) {
-        message.error('Veuillez indiquer le nom du poisson personnalisé');
-        return;
-      }
-      
-      // Préparer les données du poisson
-      let fishTypeData = {};
-      
-      if (formValues.fishType === 'custom') {
-        // Si c'est un poisson personnalisé, on sauvegarde d'abord le type personnalisé
-        const customFish = storageService.addCustomFishType(formValues.customFishType, waterType);
-        fishTypeData = {
-          fishType: 'custom',
-          customFishType: formValues.customFishType
-        };
-      } else {
-        fishTypeData = {
-          fishType: formValues.fishType
-        };
-      }
-      
       const currentUser = userService.getCurrentUser();
       
       if (isEditMode && currentCatch) {
@@ -260,9 +226,7 @@ const CatchesPage = () => {
         const updatedCatch = {
           ...currentCatch,
           ...formValues,
-          ...fishTypeData,
-          location: customLocation,
-          address: addressForm.getFieldValue('address'),
+          fishes: fishList,
           photo: imageUrl || currentCatch.photo,
           waterType: waterType
         };
@@ -276,9 +240,7 @@ const CatchesPage = () => {
         // Créer la nouvelle capture
         const newCatch = createCatch({
           ...formValues,
-          ...fishTypeData,
-          location: customLocation,
-          address: addressForm.getFieldValue('address'),
+          fishes: fishList,
           createdBy: currentUser.id,
           photo: imageUrl,
           waterType: waterType
@@ -295,11 +257,11 @@ const CatchesPage = () => {
       setIsEditMode(false);
       setCurrentCatch(null);
       form.resetFields();
-      addressForm.resetFields();
+      fishForm.resetFields();
       setWaterType(WATER_TYPES.FRESH);
       setShowCustomFishInput(false);
-      setCustomLocation(null);
       setImageUrl('');
+      setFishList([]);
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la capture:', error);
       message.error('Une erreur est survenue lors de l\'ajout de la capture');
@@ -311,7 +273,15 @@ const CatchesPage = () => {
     return spot ? spot.name : 'Spot inconnu';
   };
 
-  const getFishName = (fishType, customFishType) => {
+  const getSpotLocation = (spotId) => {
+    const spot = storageService.getSpots().find(s => s.id === spotId);
+    return spot ? spot.location : null;
+  };
+
+  const getFishName = (fishType, customFishType, fishName) => {
+    if (fishName) {
+      return fishName;
+    }
     if (fishType === 'custom' && customFishType) {
       return customFishType;
     }
@@ -356,6 +326,48 @@ const CatchesPage = () => {
     </div>
   );
 
+  const renderFishList = () => {
+    if (fishList.length === 0) {
+      return (
+        <Empty
+          description="Aucun poisson ajouté à cette capture"
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
+      );
+    }
+
+    return (
+      <List
+        itemLayout="horizontal"
+        dataSource={fishList}
+        renderItem={fish => (
+          <List.Item
+            actions={[
+              <Button 
+                type="text" 
+                danger 
+                icon={<MinusCircleOutlined />}
+                onClick={() => handleRemoveFish(fish.id)}
+              >
+                Retirer
+              </Button>
+            ]}
+          >
+            <List.Item.Meta
+              title={getFishName(fish.fishType, fish.customFishType, fish.name)}
+              description={
+                <>
+                  {fish.weight && <div>Poids: {fish.weight} kg</div>}
+                  {fish.length && <div>Taille: {fish.length} cm</div>}
+                </>
+              }
+            />
+          </List.Item>
+        )}
+      />
+    );
+  };
+
   return (
     <div>
       <Card
@@ -365,9 +377,9 @@ const CatchesPage = () => {
             setIsEditMode(false);
             setCurrentCatch(null);
             setImageUrl('');
-            setCustomLocation(null);
+            setFishList([]);
             form.resetFields();
-            addressForm.resetFields();
+            fishForm.resetFields();
             setWaterType(WATER_TYPES.FRESH);
             setShowCustomFishInput(false);
             setIsModalVisible(true);
@@ -423,16 +435,16 @@ const CatchesPage = () => {
                 ]}
               >
                 <List.Item.Meta
-                  title={`${getFishName(item.fishType, item.customFishType)} - ${new Date(item.createdAt).toLocaleDateString()}`}
+                  title={`Capture du ${new Date(item.createdAt).toLocaleDateString()}`}
                   description={
                     <>
                       <p><strong>Spot:</strong> {getSpotName(item.spotId)}</p>
                       {item.address && <p><strong>Adresse:</strong> {item.address}</p>}
-                      {item.location && (
+                      {getSpotLocation(item.spotId) && (
                         <p>
-                          <strong>Localisation précise:</strong> 
+                          <strong>Localisation:</strong> 
                           <a 
-                            href={`https://www.google.com/maps?q=${item.location.lat},${item.location.lng}`}
+                            href={`https://www.google.com/maps?q=${getSpotLocation(item.spotId).lat},${getSpotLocation(item.spotId).lng}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ marginLeft: 8 }}
@@ -445,9 +457,26 @@ const CatchesPage = () => {
                       <p><strong>Appât:</strong> {item.bait}</p>
                       <p><strong>Technique:</strong> {item.technique}</p>
                       <p><strong>Météo:</strong> {item.weather}</p>
-                      {item.weight && <p><strong>Poids:</strong> {item.weight} kg</p>}
-                      {item.length && <p><strong>Taille:</strong> {item.length} cm</p>}
                       {item.notes && <p><strong>Notes:</strong> {item.notes}</p>}
+                      
+                      <Divider orientation="left">Poissons capturés</Divider>
+                      <List
+                        itemLayout="horizontal"
+                        dataSource={item.fishes || []}
+                        renderItem={fish => (
+                          <List.Item>
+                            <List.Item.Meta
+                              title={getFishName(fish.fishType, fish.customFishType, fish.name)}
+                              description={
+                                <>
+                                  {fish.weight && <span style={{ marginRight: '10px' }}>Poids: {fish.weight} kg</span>}
+                                  {fish.length && <span>Taille: {fish.length} cm</span>}
+                                </>
+                              }
+                            />
+                          </List.Item>
+                        )}
+                      />
                     </>
                   }
                 />
@@ -471,53 +500,19 @@ const CatchesPage = () => {
           setCurrentCatch(null);
           setWaterType(WATER_TYPES.FRESH);
           setShowCustomFishInput(false);
-          setCustomLocation(null);
           setImageUrl('');
+          setFishList([]);
           form.resetFields();
-          addressForm.resetFields();
+          fishForm.resetFields();
         }}
         width={800}
       >
-        <Tabs defaultActiveKey="1">
+        <Tabs 
+          activeKey={activeTabKey}
+          onChange={setActiveTabKey}
+        >
           <Tabs.TabPane tab="Informations" key="1">
             <Form form={form} layout="vertical">
-              <Form.Item label="Type d'eau" required>
-                <Radio.Group value={waterType} onChange={handleWaterTypeChange}>
-                  {Object.entries(WATER_TYPES_FR).map(([key, value]) => (
-                    <Radio.Button key={key} value={key}>{value}</Radio.Button>
-                  ))}
-                </Radio.Group>
-              </Form.Item>
-
-              <Form.Item
-                name="fishType"
-                label="Type de poisson"
-                rules={[{ required: true, message: 'Veuillez sélectionner un type' }]}
-              >
-                <Select onChange={handleFishTypeChange}>
-                  <Select.OptGroup label={WATER_TYPES_FR[waterType]}>
-                    {FISH_BY_WATER_TYPE[waterType].map((fishType) => (
-                      <Select.Option key={fishType} value={fishType}>
-                        {FISH_TYPES_FR[fishType]}
-                      </Select.Option>
-                    ))}
-                  </Select.OptGroup>
-                  <Select.Option value="custom">
-                    {getCustomFishLabel(waterType)}
-                  </Select.Option>
-                </Select>
-              </Form.Item>
-
-              {showCustomFishInput && (
-                <Form.Item
-                  name="customFishType"
-                  label="Nom du poisson personnalisé"
-                  rules={[{ required: true, message: 'Veuillez entrer un nom' }]}
-                >
-                  <Input placeholder="Entrez le nom du poisson" />
-                </Form.Item>
-              )}
-
               <Form.Item
                 name="spotId"
                 label="Spot de pêche"
@@ -569,6 +564,61 @@ const CatchesPage = () => {
                 />
               </Form.Item>
 
+              <Form.Item name="notes" label="Notes">
+                <TextArea rows={4} />
+              </Form.Item>
+            </Form>
+
+            <Divider orientation="left">Poissons capturés</Divider>
+            {renderFishList()}
+          </Tabs.TabPane>
+          
+          <Tabs.TabPane tab="Ajouter un poisson" key="2">
+            <Form form={fishForm} layout="vertical">
+              <Form.Item label="Type d'eau" required>
+                <Radio.Group value={waterType} onChange={handleWaterTypeChange}>
+                  {Object.entries(WATER_TYPES_FR).map(([key, value]) => (
+                    <Radio.Button key={key} value={key}>{value}</Radio.Button>
+                  ))}
+                </Radio.Group>
+              </Form.Item>
+
+              <Form.Item
+                name="fishType"
+                label="Type de poisson"
+                rules={[{ required: true, message: 'Veuillez sélectionner un type' }]}
+              >
+                <Select onChange={handleFishTypeChange}>
+                  <Select.OptGroup label={WATER_TYPES_FR[waterType]}>
+                    {FISH_BY_WATER_TYPE[waterType].map((fishType) => (
+                      <Select.Option key={fishType} value={fishType}>
+                        {FISH_TYPES_FR[fishType]}
+                      </Select.Option>
+                    ))}
+                  </Select.OptGroup>
+                  <Select.Option value="custom">
+                    {getCustomFishLabel(waterType)}
+                  </Select.Option>
+                </Select>
+              </Form.Item>
+
+              {showCustomFishInput && (
+                <Form.Item
+                  name="customFishType"
+                  label="Nom du poisson personnalisé"
+                  rules={[{ required: true, message: 'Veuillez entrer un nom' }]}
+                >
+                  <Input placeholder="Entrez le nom du poisson" />
+                </Form.Item>
+              )}
+
+              <Form.Item
+                name="fishName"
+                label="Nom du poisson (optionnel)"
+              >
+                <Input placeholder="Donnez un nom à votre poisson" />
+              </Form.Item>
+
               <Form.Item name="weight" label="Poids (kg)">
                 <Input type="number" step="0.1" />
               </Form.Item>
@@ -577,44 +627,12 @@ const CatchesPage = () => {
                 <Input type="number" />
               </Form.Item>
 
-              <Form.Item name="notes" label="Notes">
-                <TextArea rows={4} />
+              <Form.Item>
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleAddFish}>
+                  Ajouter ce poisson
+                </Button>
               </Form.Item>
             </Form>
-          </Tabs.TabPane>
-          
-          <Tabs.TabPane tab="Localisation" key="2">
-            <Form form={addressForm} layout="vertical">
-              <Form.Item 
-                name="address" 
-                label="Adresse" 
-                validateStatus={addressError ? 'error' : ''}
-                help={addressError}
-              >
-                <Space.Compact style={{ width: '100%' }}>
-                  <Input 
-                    placeholder="Entrez une adresse" 
-                    value={searchAddress}
-                    onChange={e => setSearchAddress(e.target.value)}
-                    style={{ width: 'calc(100% - 46px)' }}
-                  />
-                  <Button 
-                    type="primary" 
-                    icon={<SearchOutlined />} 
-                    onClick={handleAddressSearch}
-                    loading={isSearching}
-                  >
-                    {!isSearching && "Rechercher"}
-                  </Button>
-                </Space.Compact>
-              </Form.Item>
-            </Form>
-            
-            <div style={{ marginTop: 8, marginBottom: 16, textAlign: 'center' }}>
-              <small>Ou sélectionnez l'emplacement précis sur la carte</small>
-            </div>
-            
-            <LocationPicker onChange={setCustomLocation} value={customLocation ? [customLocation.lat, customLocation.lng] : null} />
           </Tabs.TabPane>
           
           <Tabs.TabPane tab="Photo" key="3">

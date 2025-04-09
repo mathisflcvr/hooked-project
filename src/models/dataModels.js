@@ -174,21 +174,28 @@ export const createSpot = (data) => ({
   createdBy: data.createdBy
 });
 
+// Modèle pour un poisson capturé
+export const createCaughtFish = (data) => ({
+  id: data.id || Date.now().toString() + Math.floor(Math.random() * 1000),
+  fishType: data.fishType,
+  customFishType: data.customFishType || null, // Type de poisson personnalisé
+  name: data.name || null, // Nom personnalisé donné au poisson
+  weight: data.weight,
+  length: data.length
+});
+
 // Modèle pour une capture
 export const createCatch = (data) => ({
   id: data.id || Date.now().toString(),
   spotId: data.spotId,
-  location: data.location || null, // Emplacement spécifique de la capture
-  address: data.address || null, // Adresse textuelle
-  fishType: data.fishType,
-  customFishType: data.customFishType || null, // Type de poisson personnalisé
+  // La localisation vient maintenant du spot associé
+  address: data.address || null, // Adresse textuelle (optionnelle)
+  fishes: data.fishes || [], // Liste des poissons capturés
   waterType: data.waterType || WATER_TYPES.FRESH, // Type d'eau
   photo: data.photo,
   bait: data.bait,
   technique: data.technique,
   weather: data.weather,
-  weight: data.weight,
-  length: data.length,
   notes: data.notes,
   catchDate: data.catchDate || new Date().toISOString(), // Date de la capture
   createdAt: data.createdAt || new Date().toISOString(),
