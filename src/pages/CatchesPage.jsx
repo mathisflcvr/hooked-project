@@ -134,7 +134,7 @@ const CatchesPage = () => {
     form.setFieldsValue({
       spotId: catchItem.spotId,
       bait: catchItem.bait,
-      technique: catchItem.technique,
+      fishingType: catchItem.fishingType,
       weather: catchItem.weather,
       notes: catchItem.notes,
       catchDate: catchItem.catchDate ? moment(catchItem.catchDate) : undefined
@@ -209,7 +209,7 @@ const CatchesPage = () => {
         return;
       }
       
-      if (!formValues.technique) {
+      if (!formValues.fishingType) {
         message.error('Veuillez indiquer la technique utilisée');
         return;
       }
@@ -455,7 +455,7 @@ const CatchesPage = () => {
                       )}
                       <p><strong>Date de capture:</strong> {item.catchDate ? new Date(item.catchDate).toLocaleDateString() : 'Non spécifiée'}</p>
                       <p><strong>Appât:</strong> {item.bait}</p>
-                      <p><strong>Technique:</strong> {item.technique}</p>
+                      <p><strong>Technique:</strong> {FISHING_TYPES_FR[item.fishingType] || item.fishingType}</p>
                       <p><strong>Météo:</strong> {item.weather}</p>
                       {item.notes && <p><strong>Notes:</strong> {item.notes}</p>}
                       
@@ -531,11 +531,17 @@ const CatchesPage = () => {
           </Form.Item>
 
           <Form.Item
-            name="technique"
-            label="Technique utilisée"
-            rules={[{ required: true, message: 'Veuillez entrer la technique utilisée' }]}
+            name="fishingType"
+            label="Technique de pêche"
+            rules={[{ required: true, message: 'Veuillez sélectionner une technique de pêche' }]}
           >
-            <Input />
+            <Select placeholder="Sélectionnez une technique">
+              {Object.entries(FISHING_TYPES_FR).map(([key, value]) => (
+                <Select.Option key={key} value={key}>
+                  {value}
+                </Select.Option>
+              ))}
+            </Select>
           </Form.Item>
 
           <Form.Item
