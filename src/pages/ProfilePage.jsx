@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, Avatar, Button, Tabs, Form, Input, message, List, Space, Modal, Switch, Row, Col } from 'antd';
-import { UserOutlined, EditOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, CameraOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Card, Avatar, Button, Tabs, Form, Input, message, List, Space, Modal, Switch, Row, Col, Divider, Alert } from 'antd';
+import { UserOutlined, EditOutlined, EnvironmentOutlined, HeartOutlined, HeartFilled, CameraOutlined, LoadingOutlined, SyncOutlined, CloudUploadOutlined, CloudDownloadOutlined } from '@ant-design/icons';
 import { userService } from '../services/userService';
 import { imageService } from '../services/imageService';
 import { storageService } from '../services/storageService';
@@ -30,9 +30,15 @@ const ProfilePage = () => {
   const [userCatches, setUserCatches] = useState([]);
   const [isAvatarModalVisible, setIsAvatarModalVisible] = useState(false);
   const [form] = Form.useForm();
+  const [syncEnabled, setSyncEnabled] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     loadUserData();
+    
+    // Vérifier l'état de la synchronisation
+    const syncState = storageService.isSyncEnabled();
+    setSyncEnabled(syncState);
   }, [authUser]);
 
   const loadUserData = async () => {
@@ -132,13 +138,16 @@ const ProfilePage = () => {
         return;
       }
       
-      // Mettre à jour le profil via AuthContext
+      // Mettre à jour le profil via AuthContext et la bio avec la nouvelle méthode
       try {
         await updateProfile(authUser.id, {
           username: values.username,
           bio: values.bio,
           notifications: values.notifications
         });
+        
+        // Mettre à jour la bio avec la nouvelle méthode spécifique
+        await userService.updateUserBio(values.bio);
         
         // Mettre à jour également dans userService pour la compatibilité
         userService.updateUserProfile({
@@ -260,6 +269,55 @@ const ProfilePage = () => {
     }
     
     return FISH_TYPES_FR[fishType] || fishType;
+  };
+
+  const handleToggleSync = (checked) => {
+    try {
+      storageService.setSyncEnabled(checked);
+      setSyncEnabled(checked);
+      message.success(`Synchronisation ${checked ? 'activée' : 'désactivée'}`);
+    } catch (error) {
+      console.error('Erreur lors du changement d\'état de synchronisation:', error);
+      message.error('Impossible de modifier l\'état de synchronisation');
+    }
+  };
+  
+  const handleSyncToSupabase = async () => {
+    try {
+      setIsSyncing(true);
+      const success = await userService.syncLocalDataToSupabase();
+      
+      if (success) {
+        message.success('Données synchronisées avec succès vers Supabase');
+      } else {
+        message.error('Erreur lors de la synchronisation des données');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la synchronisation vers Supabase:', error);
+      message.error('Impossible de synchroniser les données');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+  
+  const handleSyncFromSupabase = async () => {
+    try {
+      setIsSyncing(true);
+      const success = await userService.fetchDataFromSupabase();
+      
+      if (success) {
+        message.success('Données récupérées avec succès depuis Supabase');
+        // Recharger les données
+        await loadUserData();
+      } else {
+        message.error('Erreur lors de la récupération des données');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération depuis Supabase:', error);
+      message.error('Impossible de récupérer les données');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   if (loading) {
@@ -435,28 +493,51 @@ const ProfilePage = () => {
             </Card>
           ) : (
             <Card style={{ borderRadius: '8px' }}>
-              <h3>Statistiques</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', margin: '16px 0' }}>
-                <div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{userCatches.length}</div>
-                  <div>Captures</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{favoriteSpots.length}</div>
-                  <div>Spots favoris</div>
-                </div>
+              <h3>Informations personnelles</h3>
+              <p><strong>Nom d'utilisateur:</strong> {displayName}</p>
+              <p><strong>Email:</strong> {userEmail}</p>
+              <p><strong>Bio:</strong> {userBio}</p>
+              <p><strong>Notifications:</strong> {userNotifications ? 'Activées' : 'Désactivées'}</p>
+            </Card>
+          )}
+          
+          {authUser && (
+            <Card style={{ borderRadius: '8px', marginTop: '16px' }}>
+              <h3>Synchronisation des données</h3>
+              <p>Synchronisez vos spots, captures et favoris avec le cloud</p>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <Space>
+                  <span>Synchronisation automatique:</span>
+                  <Switch checked={syncEnabled} onChange={handleToggleSync} />
+                </Space>
               </div>
               
-              <h3>À propos</h3>
-              <p>{userBio}</p>
+              <Alert
+                message="Comment fonctionne la synchronisation"
+                description="Lorsque la synchronisation est activée, vos spots, captures et favoris sont automatiquement enregistrés dans votre profil Supabase. Vous pouvez à tout moment forcer une synchronisation manuelle avec les boutons ci-dessous."
+                type="info"
+                showIcon
+                style={{ marginBottom: '16px' }}
+              />
               
-              <h3>Préférences</h3>
-              <p>
-                <strong>Notifications:</strong> {userNotifications ? 'Activées' : 'Désactivées'}
-              </p>
-              <p>
-                <strong>Thème:</strong> {user?.preferences?.theme === 'dark' ? 'Sombre' : 'Clair'}
-              </p>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <Button 
+                  type="primary" 
+                  onClick={handleSyncToSupabase} 
+                  icon={<CloudUploadOutlined />}
+                  loading={isSyncing}
+                >
+                  Synchroniser vers le cloud
+                </Button>
+                <Button 
+                  onClick={handleSyncFromSupabase} 
+                  icon={<CloudDownloadOutlined />}
+                  loading={isSyncing}
+                >
+                  Récupérer depuis le cloud
+                </Button>
+              </div>
             </Card>
           )}
         </TabPane>

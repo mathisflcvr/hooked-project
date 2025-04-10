@@ -5,7 +5,8 @@ const STORAGE_KEYS = {
   USERS: 'users',
   CUSTOM_FISH_TYPES: 'custom_fish_types',
   FAVORITES: 'favorites',
-  CURRENT_USER: 'current_user'
+  CURRENT_USER: 'current_user',
+  SYNC_ENABLED: 'sync_enabled'
 };
 
 // Utilisateur par défaut
@@ -361,5 +362,217 @@ export const storageService = {
     
     console.log('État du localStorage:', storageState);
     return storageState;
-  }
+  },
+  
+  /**
+   * Vérifie si la synchronisation est activée
+   * @returns {boolean} L'état de la synchronisation
+   */
+  isSyncEnabled() {
+    try {
+      const syncEnabled = localStorage.getItem(STORAGE_KEYS.SYNC_ENABLED);
+      return syncEnabled === 'true';
+    } catch (error) {
+      console.error('Erreur lors de la vérification de l\'état de synchronisation:', error);
+      return false;
+    }
+  },
+  
+  /**
+   * Active ou désactive la synchronisation
+   * @param {boolean} enabled - État de la synchronisation
+   */
+  setSyncEnabled(enabled) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SYNC_ENABLED, enabled.toString());
+    } catch (error) {
+      console.error('Erreur lors de la définition de l\'état de synchronisation:', error);
+    }
+  },
+  
+  /**
+   * Ajoute un spot avec synchronisation possible
+   * @param {Object} spot - Le spot à ajouter
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {Object} Le spot ajouté
+   */
+  async addSpotWithSync(spot, shouldSync = true) {
+    // Ajouter localement
+    const newSpot = this.addSpot(spot);
+    
+    // Synchroniser si activé et demandé
+    if (shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après ajout de spot:', error);
+      }
+    }
+    
+    return newSpot;
+  },
+  
+  /**
+   * Met à jour un spot avec synchronisation possible
+   * @param {Object} updatedSpot - Le spot mis à jour
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {Object} Le spot mis à jour ou null
+   */
+  async updateSpotWithSync(updatedSpot, shouldSync = true) {
+    // Mettre à jour localement
+    const result = this.updateSpot(updatedSpot);
+    
+    // Synchroniser si activé et demandé
+    if (result && shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après mise à jour de spot:', error);
+      }
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Supprime un spot avec synchronisation possible
+   * @param {string} spotId - ID du spot à supprimer
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {boolean} Succès de l'opération
+   */
+  async deleteSpotWithSync(spotId, shouldSync = true) {
+    // Supprimer localement
+    const result = this.deleteSpot(spotId);
+    
+    // Synchroniser si activé et demandé
+    if (result && shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après suppression de spot:', error);
+      }
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Ajoute une capture avec synchronisation possible
+   * @param {Object} catchData - La capture à ajouter
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {Object} La capture ajoutée
+   */
+  async addCatchWithSync(catchData, shouldSync = true) {
+    // Ajouter localement
+    const newCatch = this.addCatch(catchData);
+    
+    // Synchroniser si activé et demandé
+    if (shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après ajout de capture:', error);
+      }
+    }
+    
+    return newCatch;
+  },
+  
+  /**
+   * Met à jour une capture avec synchronisation possible
+   * @param {Object} updatedCatch - La capture mise à jour
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {Object} La capture mise à jour ou null
+   */
+  async updateCatchWithSync(updatedCatch, shouldSync = true) {
+    // Mettre à jour localement
+    const result = this.updateCatch(updatedCatch);
+    
+    // Synchroniser si activé et demandé
+    if (result && shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après mise à jour de capture:', error);
+      }
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Supprime une capture avec synchronisation possible
+   * @param {string} catchId - ID de la capture à supprimer
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {boolean} Succès de l'opération
+   */
+  async deleteCatchWithSync(catchId, shouldSync = true) {
+    // Supprimer localement
+    const result = this.deleteCatch(catchId);
+    
+    // Synchroniser si activé et demandé
+    if (result && shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après suppression de capture:', error);
+      }
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Ajoute un favori avec synchronisation possible
+   * @param {string} spotId - ID du spot à mettre en favori
+   * @param {string} userId - ID de l'utilisateur
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {Object} Le favori ajouté
+   */
+  async addFavoriteWithSync(spotId, userId = 'currentUser', shouldSync = true) {
+    // Ajouter localement
+    const result = this.addFavorite(spotId, userId);
+    
+    // Synchroniser si activé et demandé
+    if (shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après ajout de favori:', error);
+      }
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Supprime un favori avec synchronisation possible
+   * @param {string} spotId - ID du spot à retirer des favoris
+   * @param {string} userId - ID de l'utilisateur
+   * @param {boolean} shouldSync - Si true, tente de synchroniser avec Supabase
+   * @returns {boolean} Succès de l'opération
+   */
+  async removeFavoriteWithSync(spotId, userId = 'currentUser', shouldSync = true) {
+    // Supprimer localement
+    const result = this.removeFavorite(spotId, userId);
+    
+    // Synchroniser si activé et demandé
+    if (result && shouldSync && this.isSyncEnabled()) {
+      try {
+        const { userService } = require('./userService');
+        await userService.syncLocalDataToSupabase();
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation après suppression de favori:', error);
+      }
+    }
+    
+    return result;
+  },
 }; 
