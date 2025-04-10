@@ -53,10 +53,9 @@ yarn dev
 
 ## Développement futur
 
-- Authentification des utilisateurs
-- API météo intégrée
 - Notifications en temps réel
 - Version mobile native
+- Transfert des informations stockées en local vers la DB Supabase
 
 ## Auteur
 
