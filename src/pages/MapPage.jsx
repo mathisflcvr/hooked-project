@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import { Card, Form, Input, Select, Button, Modal, Radio, message, Tooltip, Spin, Space, Divider, Tabs } from 'antd';
-import { PlusOutlined, EnvironmentOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, EnvironmentOutlined, SearchOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { storageService } from '../services/storageService';
 import { geocodingService } from '../services/geocodingService';
 import { createSpot, FISHING_TYPES, WATER_TYPES, WATER_TYPES_FR, FISH_TYPES, FISH_TYPES_FR, FISH_BY_WATER_TYPE } from '../models/dataModels';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { userService } from '../services/userService';
+import { useNavigate } from 'react-router-dom';
 
 // Correction pour les icônes Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -58,6 +59,7 @@ const MapPage = () => {
   const [addressError, setAddressError] = useState('');
   const [activeTabKey, setActiveTabKey] = useState('map');
   const mapRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Charger les spots depuis le stockage local
@@ -190,6 +192,10 @@ const MapPage = () => {
     setActiveTabKey(key);
   };
 
+  const handleViewSpotDetails = (spotId) => {
+    navigate(`/spots`, { state: { highlightSpotId: spotId } });
+  };
+
   const filteredSpots = spots.filter(spot => {
     return (
       (!filters.fishingType || spot.fishingType === filters.fishingType) &&
@@ -273,7 +279,7 @@ const MapPage = () => {
                       ? spot.fishTypes.map(type => FISH_TYPES_FR[type] || type).join(', ')
                       : ''
                   }</p>
-                  <p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
                     <a 
                       href={`https://www.google.com/maps?q=${spot.location.lat},${spot.location.lng}`}
                       target="_blank"
@@ -281,7 +287,15 @@ const MapPage = () => {
                     >
                       <EnvironmentOutlined /> Voir sur Google Maps
                     </a>
-                  </p>
+                    <Button 
+                      type="primary" 
+                      size="small" 
+                      icon={<InfoCircleOutlined />}
+                      onClick={() => handleViewSpotDetails(spot.id)}
+                    >
+                      Détails
+                    </Button>
+                  </div>
                 </div>
               </Popup>
             </Marker>

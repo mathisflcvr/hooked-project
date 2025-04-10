@@ -81,3 +81,20 @@ button:focus-visible {
 .dark .ant-layout {
   background: #141414;
 }
+
+/* Animation pour les cartes mises en évidence */
+@keyframes highlight-pulse {
+  0% {
+    box-shadow: 0 0 5px 2px rgba(24, 144, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 15px 7px rgba(24, 144, 255, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 5px 2px rgba(24, 144, 255, 0.5);
+  }
+}
+
+.highlighted-card {
+  animation: highlight-pulse 1.5s ease-in-out infinite;
+}

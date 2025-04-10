@@ -10,6 +10,7 @@ import { createSpot } from '../models/dataModels';
 import { FISH_TYPES, FISH_TYPES_FR } from '../models/dataModels';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useLocation } from 'react-router-dom';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -85,10 +86,32 @@ const SpotsPage = () => {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastDetails, setForecastDetails] = useState(null);
   const [isForecastModalVisible, setIsForecastModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedSpotId, setHighlightedSpotId] = useState(null);
+  const location = useLocation();
 
   useEffect(() => {
     loadSpots();
-  }, []);
+    
+    // Vérifier s'il y a un spotId à mettre en évidence depuis l'état de navigation
+    if (location.state && location.state.highlightSpotId) {
+      setHighlightedSpotId(location.state.highlightSpotId);
+      
+      // Faire défiler jusqu'au spot surligné
+      setTimeout(() => {
+        const element = document.getElementById(`spot-card-${location.state.highlightSpotId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Ajouter une classe pour animation puis la supprimer
+          element.classList.add('highlighted-card');
+          setTimeout(() => {
+            element.classList.remove('highlighted-card');
+          }, 3000);
+        }
+      }, 500);
+    }
+  }, [location]);
   
   const loadSpots = () => {
     const loadedSpots = storageService.getSpots();
@@ -311,12 +334,53 @@ const SpotsPage = () => {
     </div>
   );
 
+  // Filtrer les spots en fonction de la recherche
+  const filterSpots = (spots) => {
+    if (!searchQuery) return spots;
+    
+    const query = searchQuery.toLowerCase();
+    return spots.filter(spot => {
+      return (
+        (spot.name && spot.name.toLowerCase().includes(query)) ||
+        (spot.description && spot.description.toLowerCase().includes(query)) ||
+        (spot.address && spot.address.toLowerCase().includes(query)) ||
+        (spot.type && spot.type.toLowerCase().includes(query)) ||
+        (Array.isArray(spot.fishTypes) && spot.fishTypes.some(type => 
+          (FISH_TYPES_FR[type] || type).toLowerCase().includes(query)
+        ))
+      );
+    });
+  };
+  
   // Regrouper les spots par type
-  const spotsByType = spots.reduce((acc, spot) => {
-    acc[spot.type] = acc[spot.type] || [];
-    acc[spot.type].push(spot);
-    return acc;
-  }, {});
+  const groupSpotsByType = (spots) => {
+    const filtered = filterSpots(spots);
+    return filtered.reduce((acc, spot) => {
+      const type = spot.type || 'Autres';
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(spot);
+      return acc;
+    }, {});
+  };
+  
+  const spotsByType = groupSpotsByType(spots);
+  
+  const renderSearchBar = () => {
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <Input
+          placeholder="Rechercher par nom, description, adresse, type de pêche..."
+          prefix={<SearchOutlined />}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          allowClear
+          style={{ width: '100%' }}
+        />
+      </div>
+    );
+  };
 
   // Nouvelle fonction pour charger les prévisions météo
   const loadSpotForecasts = async (spotsToForecast, forceRefresh = false) => {
@@ -769,9 +833,11 @@ const SpotsPage = () => {
         }
         style={{ borderRadius: '8px' }}
       >
-        {spots.length === 0 ? (
+        {renderSearchBar()}
+        
+        {Object.keys(spotsByType).length === 0 ? (
           <Empty
-            description="Vous n'avez pas encore enregistré de spots"
+            description={searchQuery ? "Aucun spot ne correspond à votre recherche" : "Vous n'avez pas encore enregistré de spots"}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
@@ -784,8 +850,13 @@ const SpotsPage = () => {
                 renderItem={(item) => (
                   <List.Item>
                     <Card
+                      id={`spot-card-${item.id}`}
                       title={item.name}
-                      style={{ borderRadius: '8px' }}
+                      style={{ 
+                        borderRadius: '8px',
+                        transition: 'all 0.3s ease',
+                        boxShadow: highlightedSpotId === item.id ? '0 0 10px 5px rgba(24, 144, 255, 0.5)' : 'none'
+                      }}
                       cover={item.image ? <img alt={item.name} src={item.image} style={{ height: 160, objectFit: 'cover' }} /> : null}
                       extra={
                         <Button 
