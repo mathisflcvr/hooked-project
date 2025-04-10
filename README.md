@@ -24,7 +24,7 @@ Hooked est une application web dédiée aux passionnés de pêche, permettant de
 - React + Vite
 - Ant Design pour l'interface utilisateur
 - Leaflet pour les cartes interactives
-- Local Storage pour la persistance des données
+- Local Storage pour la persistance des données et Supabase pour les données stockées en BDD
 
 ## Installation
 
